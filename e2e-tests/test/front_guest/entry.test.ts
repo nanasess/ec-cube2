@@ -1,6 +1,7 @@
 import { test, expect, chromium, Page, request, APIRequestContext } from '@playwright/test';
-import * as faker from 'faker/locale/ja';
-import * as fakerEN from 'faker/locale/en_US';
+import PlaywrightConfig from '../../../playwright.config';
+import * as faker from '@faker-js/faker/locale/ja';
+import * as fakerEN from '@faker-js/faker/locale/en_US';
 import { addYears } from 'date-fns';
 
 const url = '/entry/kiyaku.php';
@@ -13,9 +14,7 @@ test.describe.serial('会員登録のテストをします', () => {
     const browser = await chromium.launch();
     mailcatcher = await request.newContext({
       baseURL: 'http://mailcatcher:1080',
-      proxy: {
-        server: process.env.HTTP_PROXY
-      }
+      proxy: PlaywrightConfig.use.proxy
     });
     await mailcatcher.delete('/messages');
 
@@ -72,7 +71,7 @@ test.describe.serial('会員登録のテストをします', () => {
     await page.check(`input[name=sex][value="${sex}"]`);
     const job = faker.datatype.number({ min: 1, max: 18 });
     await page.selectOption('select[name=job]', { value: String(job) });
-    const birth = faker.date.past(20, addYears(new Date(), -20));
+    const birth = faker.date.past(20, addYears(new Date(), -20).toISOString());
     await page.selectOption('select[name=year]', String(birth.getFullYear()));
     await page.selectOption('select[name=month]', String(birth.getMonth() + 1));
     await page.selectOption('select[name=day]', String(birth.getDate()));
@@ -102,6 +101,7 @@ test.describe.serial('会員登録のテストをします', () => {
     await expect(page.locator('#form1 >> tr:nth-child(7) > td')).toContainText(await page.locator('input[name=fax02]').inputValue());
     await expect(page.locator('#form1 >> tr:nth-child(7) > td')).toContainText(await page.locator('input[name=fax03]').inputValue());
     await expect(page.locator('#form1 >> tr:nth-child(8) > td')).toContainText(await page.locator('input[name=email]').inputValue());
+
     // TODO 性別、職業、パスワードを忘れた時のヒント等の Type を作成する
     await page.click('[alt=会員登録をする]');
   });
@@ -116,7 +116,7 @@ test.describe.serial('会員登録のテストをします', () => {
     await expect(await messages.json()).toContainEqual(expect.objectContaining(
       {
         subject: expect.stringContaining('会員登録のご完了'),
-        recipients: expect.arrayContaining([`<${email}>`])
+        recipients: expect.arrayContaining([ `<${email}>` ])
       }
     ));
   });

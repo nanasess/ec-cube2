@@ -158,7 +158,8 @@ jobs:
           sha1sum $TAG_NAME.zip | awk '{ print $1 }' > $TAG_NAME.zip.checksum.sha1
           sha256sum $TAG_NAME.tar.gz | awk '{ print $1 }' > $TAG_NAME.tar.gz.checksum.sha256
           sha256sum $TAG_NAME.zip | awk '{ print $1 }' > $TAG_NAME.zip.checksum.sha256
-          ls -al
+          echo "TGZ_SHA256=" | cat - $TAG_NAME.tar.gz.checksum.sha256 >> $GITHUB_ENV
+          echo "ZIP_SHA256=" | cat - $TAG_NAME.zip.checksum.sha256 >> $GITHUB_ENV
 
       - name: Upload binaries to release of TGZ
         # if: env.DEPLOY == 1
@@ -232,3 +233,26 @@ jobs:
           asset_name: ${{ env.TAG_NAME }}.zip.checksum.sha256
           tag: ${{ env.TAG_NAME }}
           overwrite: true
+      - name: Update Release    # チェックサムを見やすいフォーマットへ更新する
+        # if: github.event_name == 'schedule' && env.DEPLOY == 1
+        if: github.event_name == 'schedule'
+        uses: ncipollo/release-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ env.TAG_NAME }}
+          name: ${{ env.TAG_NAME }}
+          body: |
+            EC-CUBE 2.17系の Weekly build🚀 です。毎週の改善内容を反映しております。
+            常に安定して動作するよう努めていますが、思わぬ不具合を取り込んでしまっている場合もあります。十分に検証の上ご利用ください。
+
+            <table>
+            <thead><tr><th>File</th><th>Checksum(sha256)</th></tr></thead>
+            <tbody>
+            <tr><td><a href="https://github.com/${{ github.repository }}/releases/download/${{ env.TAG_NAME }}/${{ env.TAG_NAME }}.tar.gz">${{ env.TAG_NAME }}.tar.gz</a></td><td>`${{ env.TGZ_SHA256 }}`</td></tr>
+            <tr><td><a href="https://github.com/${{ github.repository }}/releases/download/${{ env.TAG_NAME }}/${{ env.TAG_NAME }}.zip">${{ env.TAG_NAME }}.zip</a></td><td>`${{ env.ZIP_SHA256 }}`</td></tr>
+            </tbody>
+            </table>
+
+          allowUpdates: true
+          prerelease: true
+          generateReleaseNotes: true

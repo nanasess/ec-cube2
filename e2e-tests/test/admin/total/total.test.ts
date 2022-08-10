@@ -122,7 +122,6 @@ test.describe.serial('売上集計画面を確認をします', () => {
     });
 
     test('月度集計の確認をします', async () => {
-      await page.pause();
       await page.goto(url);
       await page.goto(`${url}?page=${method}`);
       await page.click('text=月度で集計する');
@@ -183,7 +182,6 @@ test.describe.serial('売上集計画面を確認をします', () => {
     });
 
     test('月度集計の確認をします', async () => {
-      await page.pause();
       await page.goto(url);
       await page.goto(`${url}?page=${method}`);
       await page.click('text=月度で集計する');
@@ -244,7 +242,6 @@ test.describe.serial('売上集計画面を確認をします', () => {
     });
 
     test('月度集計の確認をします', async () => {
-      await page.pause();
       await page.goto(url);
       await page.goto(`${url}?page=${method}`);
       await page.click('text=月度で集計する');
@@ -289,7 +286,6 @@ test.describe.serial('売上集計画面を確認をします', () => {
     });
 
     test('月度集計の確認をします', async () => {
-      await page.pause();
       await page.goto(url);
       await page.goto(`${url}?page=${method}`);
       await page.click('text=月度で集計する');
@@ -312,5 +308,10 @@ test.describe.serial('売上集計画面を確認をします', () => {
         .then(path => fs.readFile(path, 'utf-8'))
         .then(file => expect(file.split('\r\n').length).toBeGreaterThanOrEqual(2));
     });
+  });
+
+  test('LC_Page_Admin_Total_Ex クラスのテストをします @extends', async ( { page }) => {
+    await page.goto(url);
+    await expect(page.locator('h1')).toContainText(/カスタマイズ/);
   });
 });

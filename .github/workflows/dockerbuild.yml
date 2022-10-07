@@ -32,7 +32,7 @@ jobs:
     steps:
       - name: downcase REPO
         run: |
-          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}-php" >> ${GITHUB_ENV}
 
       - if: ${{ matrix.php == 5.4 }}
         run: |
@@ -78,9 +78,15 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # set latest tag for default branch
+            type=raw,value=${{ matrix.php }}-apache,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
           flavor: |
             latest=auto
-            suffix=-php-${{ matrix.php }}-apache
+            prefix=${{ matrix.php }}-apache-
 
       - name: Build and export to Docker
         uses: docker/build-push-action@v3

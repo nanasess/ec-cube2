@@ -1,17 +1,17 @@
 name: Testing dockerbuild
 on:
   push:
+    branches:
+      - '*'
+    tags:
+      - '*'
     paths:
-      - 'Dockerfile'
-      - 'dockerbuild/*'
-      - 'docker-compose*.yml'
-      - '.github/workflows/dockerbuild.yml'
+      - '**'
+      - '!*.md'
   pull_request:
     paths:
-      - 'Dockerfile'
-      - 'dockerbuild/*'
-      - 'docker-compose*.yml'
-      - '.github/workflows/dockerbuild.yml'
+      - '**'
+      - '!*.md'
   release:
     types: [ published ]
 env:
@@ -80,13 +80,12 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             # set latest tag for default branch
-            type=raw,value=${{ matrix.php }}-apache,enable={{is_default_branch}}
-            type=ref,event=branch
-            type=ref,event=tag
-            type=ref,event=pr
-          flavor: |
-            latest=auto
-            prefix=${{ matrix.php }}-apache-
+            type=raw,value=${{ matrix.php }}-apache,prefix=,enable={{is_default_branch}}
+            type=ref,event=branch,prefix=${{ matrix.php }}-apache-
+            type=ref,event=tag,prefix=${{ matrix.php }}-apache-
+            type=ref,event=pr,prefix=${{ matrix.php }}-apache-pr-
+            type=match,prefix=${{ matrix.php }}-apache-,pattern=eccube-(.*),group=1
+            type=match,prefix=${{ matrix.php }}-apache-,pattern=eccube2-weekly-(.*),group=1
 
       - name: Build and export to Docker
         uses: docker/build-push-action@v3

@@ -2,159 +2,288 @@
 
 ######################################################################
 #
-# EC-CUBE の再インストールを行う shell スクリプト
+# EC-CUBE のインストールを行う shell スクリプト
 #
-# ※ PostgreSQL 専用
 #
-# 1. 既存の EC-CUBE サイトを移動(PREFIX.YYYYMMDD)
-# 2. SVNリポジトリより checkout(tags/EC_CUBE_VERSION)
-# 3. パーミッション変更
-# 4. html/install/sql 配下の SQL を実行
-# 5. 管理者権限をアップデート
-# 6. data/install.php を生成
+# #処理内容
+# 1. パーミッション変更
+# 2. html/install/sql 配下の SQL を実行
+# 3. 管理者権限をアップデート
+# 4. data/config/config.php を生成
 #
 # 使い方
+# Configurationの内容を自分の環境に併せて修正
+# PostgreSQLの場合は、DBユーザーを予め作成しておいて
+# # ./ec_cube_install.sh pgsql
+# MySQLはMYSQLのRoot以外のユーザーで実行する場合は、128行目をコメントアウトして
+# # ./ec_cube_install.sh mysql
 #
-# # ./ec_cube_install.sh /install/path/to/eccube eccube-2.4.1
-#
-# この場合の DocumentRoot は, /install/path/to/eccube/html になります.
 #
 # 開発コミュニティの関連スレッド
 # http://xoops.ec-cube.net/modules/newbb/viewtopic.php?topic_id=4918&forum=14&post_id=23090#forumpost23090
 #
 #######################################################################
 
-PREFIX=${PREFIX:-"$1"}
-EC_CUBE_VERSION=${EC_CUBE_VERSION:-"$2"}
-
-ADMIN_MAIL=${ADMIN_MAIL:-"shop@ec-cube.net"}
-SHOP_NAME=${SHOP_NAME:-"ロックオンのふとんやさん"}
-INSTALL_PHP="data/install.php"
-SITE_URL=${SITE_URL:-"http://demo2.ec-cube.net/"}
-SSL_URL=${SSL_URL:-"http://demo2.ec-cube.net/"}
+#######################################################################
+# Configuration
+#-- Shop Configuration
+CONFIG_PHP="data/config/config.php"
+ADMIN_MAIL=${ADMIN_MAIL:-"admin@example.com"}
+SHOP_NAME=${SHOP_NAME:-"EC-CUBE SHOP"}
+HTTP_URL=${HTTP_URL:-"http://localhost:8000/"}
+HTTPS_URL=${HTTPS_URL:-"http://localhost:8000/"}
+ROOT_URLPATH=${ROOT_URLPATH:-"/"}
 DOMAIN_NAME=${DOMAIN_NAME:-""}
+ADMIN_DIR=${ADMIN_DIR:-"admin/"}
 
-TODAY=`date "+%Y%m%d"`
+DBSERVER=${DBSERVER-"127.0.0.1"}
+DBNAME=${DBNAME:-"eccube_db"}
+DBUSER=${DBUSER:-"eccube_db_user"}
+DBPASS=${DBPASS:-"password"}
 
-SVN=svn
-SVN_USER=guest
-SVN_PASSWD=lh1jNhUn
+MAIL_BACKEND=${MAIL_BACKEND-"smtp"}
+SMTP_HOST=${SMTP_HOST-"127.0.0.1"}
+SMTP_PORT=${SMTP_PORT-"1025"}
+SMTP_USER=${SMTP_USER-""}
+SMTP_PASSWORD=${SMTP_PASSWORD-""}
 
-REPOSITORY="https://svn.ec-cube.net/open/tags/"
+ADMINPASS="f6b126507a5d00dbdbb0f326fe855ddf84facd57c5603ffdf7e08fbb46bd633c"
+AUTH_MAGIC="droucliuijeanamiundpnoufrouphudrastiokec"
 
-PGUSER=postgres
-DROPDB=dropdb
-CREATEDB=createdb
-PSQL=psql
+DBTYPE=$1;
 
-DBSERVER="127.0.0.1"
-DBNAME=demo2_db
-DBUSER=demo2_db_user
-DBPASS=password
-DBPORT=5432
+case "${DBTYPE}" in
+"heroku" )
+    PSQL=psql
+    export PGPASSWORD=${PGPASSWORD-$DBPASS}
+    PGUSER=${PGUSER-"postgres"}
+    DBPORT=${DBPORT:-"5432"}
+;;
+"appveyor" )
+    PSQL=psql
+    export PGPASSWORD=${PGPASSWORD-$DBPASS}
+    PGUSER=postgres
+    DBPORT=${DBPORT:-"5432"}
+;;
+"pgsql" )
+    PSQL=psql
+    export PGPASSWORD=${PGPASSWORD-$DBPASS}
+    PGUSER=postgres
+    DBPORT=${DBPORT:-"5432"}
+    DB=$DBTYPE;
+;;
+"mysql" | "mysqli" )
+    MYSQL=mysql
+    ROOTUSER=root
+    ROOTPASS=${ROOTPASS-$DBPASS}
+    DBPORT=${DBPORT:-"3306"}
+    DB=mysql;
+;;
+* ) echo "ERROR:: argument is invaid"
+exit
+;;
+esac
 
-OPTIONAL_SQL_FILE=optional.sql
 
+#######################################################################
+# Functions
 
-echo "PREFIX=${PREFIX}"
-echo "EC_CUBE_VERSION=${EC_CUBE_VERSION}"
+adjust_directory_permissions()
+{
+    chmod -R go+w "./html"
+    chmod go+w "./data"
+    chmod -R go+w "./data/Smarty"
+    chmod -R go+w "./data/cache"
+    chmod -R go+w "./data/class"
+    chmod -R go+w "./data/class_extends"
+    chmod go+w "./data/config"
+    chmod -R go+w "./data/download"
+    chmod -R go+w "./data/downloads"
+    chmod go+w "./data/fonts"
+    chmod go+w "./data/include"
+    chmod go+w "./data/logs"
+    chmod -R go+w "./data/module"
+    chmod go+w "./data/smarty_extends"
+    chmod go+w "./data/upload"
+    chmod go+w "./data/upload/csv"
+}
 
-if [ -d ${PREFIX} ]
-then
-    echo "backup old version..."
-    mv ${PREFIX} "${PREFIX}.${TODAY}"
-fi
+create_sequence_tables()
+{
+    SEQUENCES="
+dtb_best_products_best_id_seq
+dtb_bloc_bloc_id_seq
+dtb_category_category_id_seq
+dtb_class_class_id_seq
+dtb_classcategory_classcategory_id_seq
+dtb_csv_no_seq
+dtb_csv_sql_sql_id_seq
+dtb_customer_customer_id_seq
+dtb_deliv_deliv_id_seq
+dtb_holiday_holiday_id_seq
+dtb_kiyaku_kiyaku_id_seq
+dtb_mail_history_send_id_seq
+dtb_maker_maker_id_seq
+dtb_member_member_id_seq
+dtb_module_update_logs_log_id_seq
+dtb_news_news_id_seq
+dtb_order_order_id_seq
+dtb_order_detail_order_detail_id_seq
+dtb_other_deliv_other_deliv_id_seq
+dtb_pagelayout_page_id_seq
+dtb_payment_payment_id_seq
+dtb_products_class_product_class_id_seq
+dtb_products_product_id_seq
+dtb_review_review_id_seq
+dtb_send_history_send_id_seq
+dtb_mailmaga_template_template_id_seq
+dtb_plugin_plugin_id_seq
+dtb_plugin_hookpoint_plugin_hookpoint_id_seq
+dtb_api_config_api_config_id_seq
+dtb_api_account_api_account_id_seq
+dtb_tax_rule_tax_rule_id_seq
+"
 
-if [ -f ${OPTIONAL_SQL_FILE} ]
-then
-    echo "remove optional SQL"
-    rm ${OPTIONAL_SQL_FILE}
-fi
+    comb_sql="";
+    for S in $SEQUENCES; do
+        case ${DBTYPE} in
+            heroku | appveyor | pgsql )
+                sql=$(echo "CREATE SEQUENCE ${S} START 10000;")
+            ;;
+            mysql | mysqli )
+                sql=$(echo "CREATE TABLE ${S} (
+                        sequence int(11) NOT NULL AUTO_INCREMENT,
+                        PRIMARY KEY (sequence)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+                    LOCK TABLES ${S} WRITE;
+                    INSERT INTO ${S} VALUES (10000);
+                    UNLOCK TABLES;")
+            ;;
+        esac
 
-echo "checkout sources from svn.ec-cube.net..."
-${SVN} checkout --username ${SVN_USER} --password ${SVN_PASSWD} \
-    "${REPOSITORY}/${EC_CUBE_VERSION}" ${PREFIX}
+        comb_sql=${comb_sql}${sql}
+    done;
 
-echo "update permissions..."
-chmod -R 777 "${PREFIX}/data/cache"
-chmod -R 777 "${PREFIX}/data/class"
-chmod -R 777 "${PREFIX}/data/Smarty"
-chmod -R 777 "${PREFIX}/data/logs"
-chmod -R 777 "${PREFIX}/data/downloads"
-chmod -R 777 "${PREFIX}/html/install/temp"
-chmod -R 777 "${PREFIX}/html/user_data"
-chmod -R 777 "${PREFIX}/html/cp"
-chmod -R 777 "${PREFIX}/html/upload"
+    case ${DBTYPE} in
+        heroku | appveyor | pgsql )
+            echo ${comb_sql} | ${PSQL} -h ${DBSERVER} -p ${DBPORT} -U ${DBUSER} ${DBNAME}
+        ;;
+        mysql)
+            echo ${comb_sql} | ${MYSQL} -h ${DBSERVER} -P ${DBPORT} -u ${DBUSER} ${PASSOPT} ${DBNAME}
+        ;;
+    esac
+}
 
-#echo "dropdb..."
-#su ${PGUSER} -c "${DROPDB} ${DBNAME}"
+get_optional_sql()
+{
+    echo "INSERT INTO dtb_member (member_id, login_id, password, name, salt, work, del_flg, authority, creator_id, rank, update_date) VALUES (2, 'admin', '${ADMINPASS}', '管理者', '${AUTH_MAGIC}', '1', '0', '0', '0', '1', current_timestamp);"
+    echo "INSERT INTO dtb_baseinfo (id, shop_name, email01, email02, email03, email04, top_tpl, product_tpl, detail_tpl, mypage_tpl, update_date) VALUES (1, '${SHOP_NAME}', '${ADMIN_MAIL}', '${ADMIN_MAIL}', '${ADMIN_MAIL}', '${ADMIN_MAIL}', 'default1', 'default1', 'default1', 'default1', current_timestamp);"
+}
 
-#echo "createdb..."
-#su ${PGUSER} -c "${CREATEDB} -U ${DBUSER} ${DBNAME}"
-
-SQL_DIR="${PREFIX}/html/install/sql"
-
-echo "drop view..."
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${SQL_DIR}/drop_view.sql ${DBNAME}"
-
-echo "drop tables..."
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${SQL_DIR}/drop_table.sql ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -c 'DROP TABLE dtb_session;' ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -c 'DROP TABLE dtb_module;' ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -c 'DROP TABLE dtb_campaign_order;' ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -c 'DROP TABLE dtb_mobile_kara_mail;' ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -c 'DROP TABLE dtb_mobile_ext_session_id;' ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -c 'DROP TABLE dtb_site_control;' ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -c 'DROP TABLE dtb_trackback;' ${DBNAME}"
-
-echo "create table..."
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${SQL_DIR}/create_table_pgsql.sql ${DBNAME}"
-
-echo "create_view..."
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${SQL_DIR}/create_view.sql ${DBNAME}"
-
-echo "adding tables..."
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${SQL_DIR}/add/dtb_campaign_order_pgsql.sql ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${SQL_DIR}/add/dtb_mobile_ext_session_id_pgsql.sql ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${SQL_DIR}/add/dtb_mobile_kara_mail_pgsql.sql ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${SQL_DIR}/add/dtb_module_pgsql.sql ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${SQL_DIR}/add/dtb_session_pgsql.sql ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${SQL_DIR}/add/dtb_site_control_pgsql.sql ${DBNAME}"
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${SQL_DIR}/add/dtb_trackback_pgsql.sql ${DBNAME}"
-
-echo "insert data..."
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${SQL_DIR}/insert_data.sql ${DBNAME}"
-
-echo "create optional SQL..."
-echo "INSERT INTO dtb_member (member_id, login_id, password, authority, creator_id) VALUES ('1', 'admin', '2c19f4a742398150cecc80b3e76b673a35b8c19c', '0', '0');" >> ${OPTIONAL_SQL_FILE}
-echo "INSERT INTO dtb_baseinfo (shop_name, email01, email02, email03, email04, email05, top_tpl, product_tpl, detail_tpl, mypage_tpl) VALUES ('${SHOP_NAME}', '${ADMIN_MAIL}', '${ADMIN_MAIL}', '${ADMIN_MAIL}', '${ADMIN_MAIL}', '${ADMIN_MAIL}', 'default1', 'default1', 'default1', 'default1');" >> ${OPTIONAL_SQL_FILE}
-echo "execute optional SQL..."
-su ${PGUSER} -c "${PSQL} -U ${DBUSER} -f ${OPTIONAL_SQL_FILE} ${DBNAME}"
-
-echo "copy images..."
-cp -rv "${PREFIX}/html/install/save_image" "${PREFIX}/html/upload/"
-
-echo "creating ${INSTALL_PHP}..."
-cat > "${PREFIX}/${INSTALL_PHP}" <<EOF
+create_config_php()
+{
+    cat > "./${CONFIG_PHP}" <<__EOF__
 <?php
-define ('ECCUBE_INSTALL', 'ON');
-define ('HTML_PATH', '${PREFIX}/html/');
-define ('SITE_URL', '${SITE_URL}');
-define ('SSL_URL', '${SSL_URL}');
-define ('URL_DIR', '/');
-define ('DOMAIN_NAME', '${DOMAIN_NAME}');
-define ('DB_TYPE', 'pgsql');
-define ('DB_USER', '${DBUSER}');
-define ('DB_PASSWORD', '${DBPASS}');
-define ('DB_SERVER', '${DBSERVER}');
-define ('DB_NAME', '${DBNAME}');
-define ('DB_PORT', '${DBPORT}');
-define ('DATA_PATH', '${PREFIX}/data/');
-define ('MOBILE_HTML_PATH', HTML_PATH . 'mobile/');
-define ('MOBILE_SITE_URL', SITE_URL . 'mobile/');
-define ('MOBILE_SSL_URL', SSL_URL . 'mobile/');
-define ('MOBILE_URL_DIR', URL_DIR . 'mobile/');
-?>
-EOF
+defined('ECCUBE_INSTALL') or define('ECCUBE_INSTALL', 'ON');
+defined('HTTP_URL') or define('HTTP_URL', '${HTTP_URL}');
+defined('HTTPS_URL') or define('HTTPS_URL', '${HTTPS_URL}');
+defined('ROOT_URLPATH') or define('ROOT_URLPATH', '${ROOT_URLPATH}');
+defined('DOMAIN_NAME') or define('DOMAIN_NAME', '${DOMAIN_NAME}');
+defined('DB_TYPE') or define('DB_TYPE', '${DB}');
+defined('DB_USER') or define('DB_USER', '${DBUSER}');
+defined('DB_PASSWORD') or define('DB_PASSWORD', '${CONFIGPASS:-$DBPASS}');
+defined('DB_SERVER') or define('DB_SERVER', '${DBSERVER}');
+defined('DB_NAME') or define('DB_NAME', '${DBNAME}');
+defined('DB_PORT') or define('DB_PORT', '${DBPORT}');
+defined('ADMIN_DIR') or define('ADMIN_DIR', '${ADMIN_DIR}');
+defined('ADMIN_FORCE_SSL') or define('ADMIN_FORCE_SSL', FALSE);
+defined('ADMIN_ALLOW_HOSTS') or define('ADMIN_ALLOW_HOSTS', 'a:0:{}');
+defined('AUTH_MAGIC') or define('AUTH_MAGIC', '${AUTH_MAGIC}');
+defined('PASSWORD_HASH_ALGOS') or define('PASSWORD_HASH_ALGOS', 'sha256');
+defined('MAIL_BACKEND') or define('MAIL_BACKEND', '${MAIL_BACKEND}');
+defined('SMTP_HOST') or define('SMTP_HOST', '${SMTP_HOST}');
+defined('SMTP_PORT') or define('SMTP_PORT', '${SMTP_PORT}');
+defined('SMTP_USER') or define('SMTP_USER', '${SMTP_USER}');
+defined('SMTP_PASSWORD') or define('SMTP_PASSWORD', '${SMTP_PASSWORD}');
+
+__EOF__
+
+    cat "./${CONFIG_PHP}"
+}
+
+
+#######################################################################
+# Install
+
+#-- Update Permissions
+echo "update permissions..."
+adjust_directory_permissions
+
+#-- Setup Database
+SQL_DIR="./html/install/sql"
+
+case "${DBTYPE}" in
+"heroku" )
+    # PostgreSQL
+    echo "create table..."
+    ${PSQL} -h ${DBSERVER} -U ${DBUSER} -p ${DBPORT} -f ${SQL_DIR}/create_table_pgsql.sql ${DBNAME}
+    echo "insert data..."
+    ${PSQL} -h ${DBSERVER} -U ${DBUSER} -p ${DBPORT} -f ${SQL_DIR}/insert_data.sql ${DBNAME}
+    echo "create sequence table..."
+    create_sequence_tables
+    echo "execute optional SQL..."
+    get_optional_sql | ${PSQL} -h ${DBSERVER} -U ${DBUSER} -p ${DBPORT} ${DBNAME}
+    DBTYPE="pgsql"
+;;
+"appveyor" | "pgsql" )
+   # PostgreSQL
+    echo "dropdb..."
+    ${PSQL} -h ${DBSERVER} -U ${DBUSER} -p ${DBPORT} -c "DROP DATABASE ${DBNAME};"
+    echo "createdb..."
+    ${PSQL} -h ${DBSERVER} -U ${DBUSER} -p ${DBPORT} -c "CREATE DATABASE ${DBNAME};"
+    echo "create table..."
+    ${PSQL} -h ${DBSERVER} -U ${DBUSER} -p ${DBPORT} -f ${SQL_DIR}/create_table_pgsql.sql ${DBNAME}
+    echo "insert data..."
+    ${PSQL} -h ${DBSERVER} -U ${DBUSER} -p ${DBPORT} -f ${SQL_DIR}/insert_data.sql ${DBNAME}
+    echo "create sequence table..."
+    create_sequence_tables
+    echo "execute optional SQL..."
+    get_optional_sql | ${PSQL} -h ${DBSERVER} -U ${DBUSER} -p ${DBPORT} ${DBNAME}
+    DBTYPE="pgsql"
+;;
+"mysql" )
+    DBPASS=`echo $DBPASS | tr -d " "`
+    if [ -n ${DBPASS} ]; then
+        PASSOPT="--password=$DBPASS"
+        CONFIGPASS=$DBPASS
+    fi
+    # MySQL
+    echo "dropdb..."
+    ${MYSQL} -u ${ROOTUSER} -h ${DBSERVER} -P ${DBPORT} ${PASSOPT} -e "DROP DATABASE \`${DBNAME}\`"
+    echo "createdb..."
+    ${MYSQL} -u ${ROOTUSER} -h ${DBSERVER} -P ${DBPORT} ${PASSOPT} -e "CREATE DATABASE \`${DBNAME}\` DEFAULT COLLATE=utf8_general_ci;"
+    #echo "grant user..."
+    #${MYSQL} -u ${ROOTUSER} -h ${DBSERVER} -P ${DBPORT} ${PASSOPT} -e "GRANT ALL ON \`${DBNAME}\`.* TO '${DBUSER}'@'%' IDENTIFIED BY '${DBPASS}'"
+    echo "create table..."
+    echo "SET SESSION default_storage_engine = InnoDB; SET sql_mode = 'NO_ENGINE_SUBSTITUTION';" |
+        cat - ${SQL_DIR}/create_table_mysql.sql |
+        ${MYSQL} -h ${DBSERVER} -u ${DBUSER} -h ${DBSERVER} -P ${DBPORT} ${PASSOPT} ${DBNAME}
+    echo "insert data..."
+    echo "SET CHARACTER SET 'utf8';" |
+        cat - ${SQL_DIR}/insert_data.sql |
+        ${MYSQL} -u ${DBUSER} -h ${DBSERVER} -P ${DBPORT} ${PASSOPT} ${DBNAME}
+    echo "create sequence table..."
+    create_sequence_tables
+    echo "execute optional SQL..."
+    get_optional_sql | ${MYSQL} -u ${DBUSER} -h ${DBSERVER} -P ${DBPORT} ${PASSOPT} ${DBNAME}
+;;
+esac
+
+#-- Setup Initial Data
+echo "copy images..."
+cp -rv "./html/install/save_image" "./html/upload/"
+
+echo "creating ${CONFIG_PHP}..."
+create_config_php
 
 echo "Finished Successful!"

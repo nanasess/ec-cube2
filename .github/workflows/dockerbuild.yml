@@ -113,6 +113,7 @@ jobs:
             GD_OPTIONS=${{ env.GD_OPTIONS }}
             EXT_INSTALL_ARGS=${{ env.EXT_INSTALL_ARGS }}
             APCU=${{ env.APCU }}
+            FORCE_YES=${{ env.FORCE_YES }}
             APT_REPO=${{ env.APT_REPO }}
             APT_SECURITY_REPO=${{ env.APT_SECURITY_REPO }}
 
@@ -160,6 +161,9 @@ jobs:
             GD_OPTIONS=${{ env.GD_OPTIONS }}
             EXT_INSTALL_ARGS=${{ env.EXT_INSTALL_ARGS }}
             APCU=${{ env.APCU }}
+            FORCE_YES=${{ env.FORCE_YES }}
+            APT_REPO=${{ env.APT_REPO }}
+            APT_SECURITY_REPO=${{ env.APT_SECURITY_REPO }}
 
       - name: Upload evidence
         if: failure()

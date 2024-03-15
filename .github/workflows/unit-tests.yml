@@ -31,6 +31,11 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Build docker image
+      uses: ./.github/actions/dockerbuild
+      with:
+        php-version: ${{ matrix.php }}
+
     - name: Create ADMIN_DIR
       run: |
         sudo apt-fast install -y sharutils

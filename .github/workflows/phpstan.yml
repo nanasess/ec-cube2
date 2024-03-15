@@ -24,6 +24,11 @@ jobs:
     - name: "Checkout"
       uses: actions/checkout@v4
 
+    - name: Build docker image
+      uses: ./.github/actions/dockerbuild
+      with:
+        php-version: '8.3'
+
     - name: Setup environment
       env:
         REF_NAME: ${{ inputs.ref_name }}

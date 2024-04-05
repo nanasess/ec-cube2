@@ -47,6 +47,7 @@ const config: PlaywrightTestConfig = {
     video: 'retain-on-failure',
     ignoreHTTPSErrors: true,
     acceptDownloads: true,
+    timezoneId: 'Asia/Tokyo',
     proxy: {
       server: process.env.HTTP_PROXY ? `http://${process.env.HTTP_PROXY}` : 'http://localhost:8090'
     }

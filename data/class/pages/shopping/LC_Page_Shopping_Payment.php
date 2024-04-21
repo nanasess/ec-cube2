@@ -176,7 +176,7 @@ class LC_Page_Shopping_Payment extends LC_Page_Ex
                 $this->arrPayment = $arrSelectedDeliv['arrPayment'];
                 $this->arrDelivTime = $arrSelectedDeliv['arrDelivTime'];
                 $this->img_show = $arrSelectedDeliv['img_show'];
-
+                var_dump($this->arrErr);
                 if (empty($this->arrErr)) {
                     $this->saveShippings($objFormParam, $this->arrDelivTime);
                     $this->lfRegistData($this->tpl_uniqid, $objFormParam->getDbArray(), $objPurchase, $this->arrPayment);

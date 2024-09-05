@@ -249,7 +249,7 @@ class LC_Page_Admin_Mail extends LC_Page_Admin_Ex
     {
         $objQuery = SC_Query_Ex::getSingletonInstance();
 
-        list($linemax, $arrSendCustomer, $objNavi) = SC_Helper_Customer_Ex::sfGetSearchData($objFormParam->getHashArray(), 'All');
+        list($linemax, $arrSendCustomer, $objNavi) = SC_Helper_Customer_Ex::sfGetSearchData($objFormParam->getHashArray(), false);
         $send_customer_cnt = count($arrSendCustomer);
 
         $send_id = $objQuery->nextVal('dtb_send_history_send_id');

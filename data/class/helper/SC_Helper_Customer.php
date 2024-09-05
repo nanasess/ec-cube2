@@ -668,10 +668,10 @@ class SC_Helper_Customer
      * 会員一覧検索をする処理（ページング処理付き、管理画面用共通処理）
      *
      * @param  array  $arrParam  検索パラメーター連想配列
-     * @param  string $limitMode ページングを利用するか判定用フラグ
+     * @param  bool|string $use_paging ページングを利用するか判定用フラグ. true:ページングあり, false:ページングなし, 'All': ページングなし(下位互換用)
      * @return array( integer 全体件数, mixed 会員データ一覧配列, mixed SC_PageNaviオブジェクト)
      */
-    public static function sfGetSearchData($arrParam, $limitMode = '')
+    public static function sfGetSearchData($arrParam, $use_paging = true)
     {
         $objQuery = SC_Query_Ex::getSingletonInstance();
         $objSelect = new SC_CustomerList_Ex($arrParam, 'customer');
@@ -682,7 +682,8 @@ class SC_Helper_Customer
             $disp_pageno = 1;
         }
         $offset = intval($page_max) * (intval($disp_pageno) - 1);
-        if ($limitMode == '') {
+
+        if ($use_paging === 'All' || $use_paging === true) {
             $objQuery->setLimitOffset($page_max, $offset);
         }
         $arrData = $objQuery->getAll($objSelect->getList(), $objSelect->arrVal);

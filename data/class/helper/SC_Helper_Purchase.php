@@ -140,7 +140,7 @@ class SC_Helper_Purchase
         foreach ($arrOrderDetail as $arrDetail) {
             $objQuery->update(
                 'dtb_products_class',
-                [],
+                array(),
                 'product_class_id = ?',
                 [$arrDetail['product_class_id']],
                 ['stock' => 'stock + ?'],

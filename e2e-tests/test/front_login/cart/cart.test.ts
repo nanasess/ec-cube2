@@ -74,6 +74,11 @@ test.describe.serial('カートページのテストをします', () => {
     await expect(cartPage.getQuantity()).toContainText(String(quantity - 1));
   });
 
+  test('LC_Page_Cart_Ex クラスのテストをします @extends', async ( { cartLoginPage,  page }) => {
+    await page.goto(url);
+    await expect(page).toHaveTitle(/カスタマイズ/);
+  });
+
   test.describe('数量減算のテストを実行します[POST] @attack', () => {
     let scanId: number;
     test('アクティブスキャンを実行します', async ( { page } ) => {

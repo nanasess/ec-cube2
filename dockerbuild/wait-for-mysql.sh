@@ -3,7 +3,7 @@
 set -e
 
 echo "Waiting for mysql"
-until mysql -h "${DB_SERVER}" --password="${DB_PASSWORD}" -uroot &> /dev/null
+until mysql -h "${DB_SERVER}" --password="${DB_PASSWORD}" -u"${DB_USER}" -e "SELECT 1;" "${DB_NAME}" &> /dev/null
 do
   printf "."
   sleep 1

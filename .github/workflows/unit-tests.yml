@@ -62,12 +62,41 @@ jobs:
           echo "TAG=${PHP}-apache-${REF_NAME}" >> $GITHUB_ENV
         fi
     - run: |
-        docker compose up -d --wait
+        docker compose up -d --wait --wait-timeout 600
+
+        # Wait for config.php with timeout
+        TIMEOUT=600  # 10分でタイムアウト
+        ELAPSED=0
         while [ ! -e "data/config/config.php" ]
         do
             printf "."
             sleep 1
+            ELAPSED=$((ELAPSED + 1))
+
+            if [ $ELAPSED -ge $TIMEOUT ]; then
+                echo ""
+                echo "ERROR: config.php not generated after ${TIMEOUT} seconds"
+                echo "Checking Docker containers status..."
+                docker compose ps
+                echo ""
+                echo "Checking ec-cube container logs..."
+                docker compose logs ec-cube
+                echo ""
+                echo "Checking mysql container logs..."
+                docker compose logs mysql
+                exit 1
+            fi
+
+            # Show progress every 30 seconds
+            if [ $((ELAPSED % 30)) -eq 0 ]; then
+                echo ""
+                echo "Still waiting for config.php... (${ELAPSED}s elapsed)"
+                docker compose ps
+            fi
         done
+
+        echo ""
+        echo "config.php generated successfully!"
         cat data/config/config.php
         docker compose exec -T ec-cube composer install
     - name: Run to PHPUnit

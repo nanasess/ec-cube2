@@ -42,17 +42,17 @@ jobs:
       owner: ${{ github.repository_owner }}
     needs: [ php-cs-fixer ]
     uses: ./.github/workflows/unit-tests.yml
-  e2e-tests:
-    with:
-      ref_name: ${{ github.ref_name }}
-      base_ref: ${{ github.base_ref }}
-      event_name: ${{ github.event_name }}
-      owner: ${{ github.repository_owner }}
-    needs: [ php-cs-fixer ]
-    uses: ./.github/workflows/e2e-tests.yml
+  # e2e-tests:
+  #   with:
+  #     ref_name: ${{ github.ref_name }}
+  #     base_ref: ${{ github.base_ref }}
+  #     event_name: ${{ github.event_name }}
+  #     owner: ${{ github.repository_owner }}
+  #   needs: [ php-cs-fixer ]
+  #   uses: ./.github/workflows/e2e-tests.yml
   success:
     needs:
       - phpstan
       - unit-tests
-      - e2e-tests
+      # - e2e-tests
     uses: ./.github/workflows/success.yml

@@ -150,6 +150,28 @@ function lfnDispChange(){
                 <!--{html_checkboxes name="$key" options=$arrSTATUS selected=$arrForm[$key].value}-->
                 </td>
             </tr>
+            <tr>
+                <th>在庫有無</th>
+                <td>
+                    <!--{assign var=key value="search_stock"}-->
+                    <span class="attention"><!--{$arrErr[$key]|h}--></span>
+                    <!--{html_checkboxes name="$key" options=$arrStockStatus selected=$arrForm[$key].value}-->
+                </td>
+                <th>在庫数量</th>
+                <td>
+                    <!--{assign var=key value="search_stock_min"}-->
+                    <!--{if $arrErr[$key]}-->
+                        <span class="attention"><!--{$arrErr[$key]}--></span>
+                    <!--{/if}-->
+                    <input type="text" name="<!--{$key}-->" value="<!--{$arrForm[$key].value|h}-->" maxlength="<!--{$arrForm[$key].length}-->" style="<!--{$arrErr[$key]|sfGetErrorColor}-->" size="10" class="box10" />
+                    ～
+                    <!--{assign var=key value="search_stock_max"}-->
+                    <!--{if $arrErr[$key]}-->
+                        <span class="attention"><!--{$arrErr[$key]}--></span>
+                    <!--{/if}-->
+                    <input type="text" name="<!--{$key}-->" value="<!--{$arrForm[$key].value|h}-->" maxlength="<!--{$arrForm[$key].length}-->" style="<!--{$arrErr[$key]|sfGetErrorColor}-->" size="10" class="box10" />
+                </td>
+            </tr>
         </table>
         <div class="btn">
             <p class="page_rows">検索結果表示件数

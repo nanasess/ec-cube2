@@ -50,6 +50,8 @@ class LC_Page_Admin_Products extends LC_Page_Admin_Ex
         $this->arrDISP = $masterData->getMasterData('mtb_disp');
         $this->arrSTATUS = $masterData->getMasterData('mtb_status');
         $this->arrPRODUCTSTATUS_COLOR = $masterData->getMasterData('mtb_product_status_color');
+        // 在庫有無検索の選択肢
+        $this->arrStockStatus = ['1' => 'あり', '2' => 'なし'];
 
         $objDate = new SC_Date_Ex();
         // 登録・更新検索開始年
@@ -216,6 +218,12 @@ class LC_Page_Admin_Products extends LC_Page_Admin_Ex
         $objFormParam->addParam('終了日', 'search_endday', INT_LEN, 'n', ['MAX_LENGTH_CHECK', 'NUM_CHECK']);
 
         $objFormParam->addParam('商品ステータス', 'search_product_statuses', INT_LEN, 'n', ['MAX_LENGTH_CHECK']);
+
+        // 在庫有無(チェックボックス: 1=あり, 2=なし)
+        $objFormParam->addParam('在庫有無', 'search_stock', INT_LEN, 'n', ['MAX_LENGTH_CHECK']);
+        // 在庫数量(下限・上限)
+        $objFormParam->addParam('在庫数量(下限)', 'search_stock_min', AMOUNT_LEN, 'n', ['NUM_CHECK', 'MAX_LENGTH_CHECK']);
+        $objFormParam->addParam('在庫数量(上限)', 'search_stock_max', AMOUNT_LEN, 'n', ['NUM_CHECK', 'MAX_LENGTH_CHECK']);
     }
 
     /**
@@ -369,6 +377,28 @@ class LC_Page_Admin_Products extends LC_Page_Admin_Ex
                         .')';
                     $arrValues = array_merge($arrValues, $arrPartVal);
                 }
+                break;
+                // 在庫有無
+            case 'search_stock':
+                $arrStock = (array) $objFormParam->getValue($key);
+                $hasIn = in_array('1', $arrStock);  // あり
+                $hasOut = in_array('2', $arrStock); // なし
+                // 両方選択時は絞り込みなし
+                if ($hasIn && !$hasOut) {
+                    $where .= ' AND product_id IN (SELECT product_id FROM dtb_products_class WHERE del_flg = 0 AND (stock_unlimited = 1 OR stock > 0))';
+                } elseif ($hasOut && !$hasIn) {
+                    $where .= ' AND product_id IN (SELECT product_id FROM dtb_products_class WHERE del_flg = 0 AND stock_unlimited = 0 AND (stock <= 0 OR stock IS NULL))';
+                }
+                break;
+                // 在庫数量(下限) … 無制限商品はヒットさせる
+            case 'search_stock_min':
+                $where .= ' AND product_id IN (SELECT product_id FROM dtb_products_class WHERE del_flg = 0 AND (stock_unlimited = 1 OR stock >= ?))';
+                $arrValues[] = $objFormParam->getValue($key);
+                break;
+                // 在庫数量(上限) … 無制限商品は除外
+            case 'search_stock_max':
+                $where .= ' AND product_id IN (SELECT product_id FROM dtb_products_class WHERE del_flg = 0 AND stock_unlimited = 0 AND stock <= ?)';
+                $arrValues[] = $objFormParam->getValue($key);
                 break;
             default:
                 break;

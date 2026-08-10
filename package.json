@@ -26,7 +26,7 @@
     "@playwright/test": "^1.45.0",
     "@types/date-fns": "^2.6.0",
     "@types/faker": "^6.6.9",
-    "@types/tar": "^6.1.11",
+    "@types/tar": "^7.0.87",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "babel-eslint": "^10.0.3",
@@ -35,7 +35,7 @@
     "eslint": "^8.57.0",
     "eslint-config-jquery": "^3.0.2",
     "eslint-plugin-import": "^2.29.1",
-    "tar": "^7.4.0",
+    "tar": "^7.5.22",
     "typescript": "^5.5.4",
     "webpack-cli": "^4.10.0",
     "zaproxy": "^1.0.1"

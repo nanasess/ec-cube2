@@ -1930,6 +1930,8 @@ class SC_Utils
      * 値を JSON 形式にして返す.
      *
      * この関数は, json_encode() のラッパーです.
+     * `<` `>` `&` `'` `"` は `\u003C` 形式にするため, script 要素の中や HTML の属性値に出力しても
+     * 文字列から抜け出さない (JSON としての値は変わらない).
      *
      * @param  mixed  $value JSON 形式にエンコードする値
      *
@@ -1940,7 +1942,7 @@ class SC_Utils
      */
     public static function jsonEncode($value)
     {
-        return json_encode($value);
+        return json_encode($value, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     }
 
     /**

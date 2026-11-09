@@ -42,13 +42,16 @@
  *       `<` `>` `&` 引用符等も `\x3c` 形式にするため, 判定を誤って HTML の中に出力しても HTML として解釈されない.
  *       JavaScript で値を HTML として DOM に入れる箇所 (`.html()` / `innerHTML` 等) は HTML としてのエスケープにならないため,
  *       テンプレートで `|h` を付ける (C1 により `|h nofilter` になる).
+ * - C9: C1〜C8 で nofilter を補う出力タグと, テンプレートに nofilter が書かれた出力タグの html モードの `escape`
+ *       (引数なし / 'html') を `escape:'force'` にする. Smarty は自動エスケープを有効にすると html モードの `escape` を
+ *       何もしない式にするため, そのままでは `|escape|nl2br` 等がエスケープされずに出力される.
  *
  * C2 (画面出力の View だけを自動エスケープ対象にする) は SC_Display / SC_View 側で扱う.
  */
 class SC_Helper_SmartyEscape
 {
     /** 互換規則のバージョン. 規則を変えたら上げる (compile_id に反映される). */
-    public const VERSION = '9';
+    public const VERSION = '10';
 
     /** C4 で使う modifier 名 */
     public const MODIFIER_ERROR = 'h_allow_br';
@@ -315,7 +318,15 @@ class SC_Helper_SmartyEscape
     {
         $p = $this->parse($inner);
         if ($p === null) {
-            return $inner;
+            return $this->transformNofilterTag($inner);
+        }
+        $forced = $this->forceHtmlEscape($p);
+        if ($forced !== $p['expr']) {
+            // 以下の規則で nofilter を補う場合だけ使う. 規則に当たらなければ元のタグを返す
+            $p = $this->parse($forced.$p['attrs'].$p['tail']);
+            if ($p === null) {
+                return $inner;
+            }
         }
         $names = array_map(function ($m) { return $m['name']; }, $p['modifiers']);
         // |smarty:nodefaults は後方互換処理で除去済みの想定だが, 残っていても判定から外す
@@ -376,7 +387,7 @@ class SC_Helper_SmartyEscape
      *
      * @return array{expr: string, attrs: string, tail: string, modifiers: array<int, array{name: string, start: int, end: int}>}|null
      */
-    public function parse($inner)
+    public function parse($inner, $allowNofilter = false)
     {
         $lead = strlen($inner) - strlen(ltrim($inner));
         $s = ltrim($inner);
@@ -440,7 +451,7 @@ class SC_Helper_SmartyEscape
             return null;
         }
         $attrs = substr($s, $exprEnd);
-        if (preg_match('/\b(nofilter|assign\s*=)/', $attrs)) {
+        if (preg_match($allowNofilter ? '/\bassign\s*=/' : '/\b(nofilter|assign\s*=)/', $attrs)) {
             return null;
         }
         // modifier の終端
@@ -458,6 +469,51 @@ class SC_Helper_SmartyEscape
                 return ['name' => $m['name'], 'start' => $m['start'] + $lead, 'end' => $m['end'] + $lead];
             }, $modifiers),
         ];
+    }
+
+    /**
+     * テンプレートに nofilter が書かれた出力タグの html モードの `escape` を `escape:'force'` にする (C9).
+     *
+     * @param string $inner
+     *
+     * @return string
+     */
+    protected function transformNofilterTag($inner)
+    {
+        $p = $this->parse($inner, true);
+        if ($p === null || !preg_match('/\bnofilter\b/', $p['attrs'])) {
+            return $inner;
+        }
+
+        return $this->forceHtmlEscape($p).$p['attrs'].$p['tail'];
+    }
+
+    /**
+     * 最上位の modifier 列にある html モードの `escape` (引数なし / 'html') を `escape:'force'` にした式を返す (C9).
+     * Smarty は自動エスケープを有効にすると html モードの `escape` を何もしない式にコンパイルするため,
+     * nofilter と組み合わせると値がエスケープされずに出力される.
+     *
+     * @param array{expr: string, modifiers: array<int, array{name: string, start: int, end: int}>} $p parse() の結果
+     *
+     * @return string
+     */
+    protected function forceHtmlEscape(array $p)
+    {
+        $expr = $p['expr'];
+        // 後ろから置換して位置をずらさない
+        for ($i = count($p['modifiers']) - 1; $i >= 0; $i--) {
+            $m = $p['modifiers'][$i];
+            if ($m['name'] !== 'escape' || $this->getEscapeMode($expr, $m) !== 'html') {
+                continue;
+            }
+            $segment = substr($expr, $m['start'], $m['end'] - $m['start']);
+            $body = rtrim($segment);
+            $args = $this->splitArguments($body);
+            $args[1] = "'force'";
+            $expr = substr($expr, 0, $m['start']).implode(':', $args).substr($segment, strlen($body)).substr($expr, $m['end']);
+        }
+
+        return $expr;
     }
 
     /**

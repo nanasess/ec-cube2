@@ -130,6 +130,21 @@ class SC_View
     }
 
     /**
+     * 画面出力用に, 設定で無効にしていなければ自動エスケープを有効にする.
+     *
+     * 無効にする場合は data/config/config.php に define('SMARTY_AUTO_ESCAPE', false); を追加する.
+     * SC_Display を通らずに画面を出力する処理 (デザインのプレビュー等) からも呼ぶ.
+     *
+     * @return void
+     */
+    public function enableAutoEscapeByConfig()
+    {
+        if (!defined('SMARTY_AUTO_ESCAPE') || SMARTY_AUTO_ESCAPE) {
+            $this->enableAutoEscape();
+        }
+    }
+
+    /**
      * 自動エスケープが有効か.
      *
      * @return bool

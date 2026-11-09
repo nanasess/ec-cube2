@@ -81,6 +81,19 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             ["\$m|escape:'javascript'", "\$m|escape:'javascript'|script_escape nofilter"],
             ['$m|escape:"hex"', '$m|escape:"hex"'],
             ['$m|escape', '$m|escape'],
+            // C9
+            ['$v|escape|nl2br', "\$v|escape:'force'|nl2br|script_escape nofilter"],
+            ['$v|escape:"html"|nl2br', "\$v|escape:'force'|nl2br|script_escape nofilter"],
+            ['$v|escape:"html":"UTF-8"|nl2br_html', "\$v|escape:'force':\"UTF-8\"|nl2br_html|script_escape nofilter"],
+            ['$v|escape|sfViewPriceTax', "\$v|escape:'force'|sfViewPriceTax nofilter"],
+            ['$v|escape|escape:"javascript"', "\$v|escape:'force'|escape:\"javascript\"|script_escape nofilter"],
+            ['$v|escape|nl2br nofilter', "\$v|escape:'force'|nl2br nofilter"],
+            ['$v|escape nofilter', "\$v|escape:'force' nofilter"],
+            ['$v|escape:"force"|nl2br', '$v|escape:"force"|nl2br|script_escape nofilter'],
+            ['$v|escape:"htmlall"|nl2br', '$v|escape:"htmlall"|nl2br|script_escape nofilter'],
+            ['$v|escape:"url" nofilter', '$v|escape:"url" nofilter'],
+            ['$v|escape|upper', '$v|escape|upper'],
+            ['$v|escape assign=w', '$v|escape assign=w'],
             // 変換しないもの
             ['$v', '$v'],
             ['$v|h nofilter', '$v|h nofilter'],
@@ -126,7 +139,7 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
 
     public function testTransformIsIdempotent()
     {
-        $source = '<!--{$v|h}--><!--{$arrErr.x}--><!--{$v|h|default:$f}--><!--{$tpl_onload}-->';
+        $source = '<!--{$v|h}--><!--{$arrErr.x}--><!--{$v|h|default:$f}--><!--{$tpl_onload}--><!--{$v|escape|nl2br}--><!--{$v|escape nofilter}-->';
         $once = $this->objHelper->transform($source);
         $this->assertSame($once, $this->objHelper->transform($once));
     }
@@ -202,6 +215,10 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             'tpl_onload は従来どおり' => ['<!--{$tpl_onload}-->', ['tpl_onload' => "fnOnLoad('a');"], "fnOnLoad('a');"],
             'sfGetChecked' => ['<!--{1|sfGetChecked:$v}-->', ['v' => '1'], 'checked="checked"'],
             'sfGetEnabled' => ['<!--{$v|sfGetEnabled}-->', ['v' => ''], ' disabled="disabled"'],
+            'escape|nl2br' => ['<!--{$v|escape|nl2br}-->', ['v' => $v], $esc."<br />\n2"],
+            'escape:html|nl2br_html' => ['<!--{$v|escape:"html"|nl2br_html}-->', ['v' => $v], $esc."<br />\n2"],
+            'escape|nl2br nofilter' => ['<!--{$v|escape|nl2br nofilter}-->', ['v' => $v], $esc."<br />\n2"],
+            'escape (二重にしない)' => ['<!--{$v|escape}-->', ['v' => $v], $esc."\n2"],
             'hexentity' => ["<!--{\$v|escape:'hexentity'}-->", ['v' => 'a@'], '&#x61;&#x40;'],
             '条件式の h の後の出力' => ['<!--{if $v|h != ""}--><!--{/if}--><!--{$v}-->', ['v' => '<i>'], '&lt;i&gt;'],
             '代入の h の後の出力' => ['<!--{assign var=w value=$v|h}--><!--{$v}-->', ['v' => '<i>'], '&lt;i&gt;'],

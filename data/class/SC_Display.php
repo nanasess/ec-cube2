@@ -140,8 +140,8 @@ class SC_Display
      */
     public function setView($view)
     {
-        if ($view instanceof SC_View && (!defined('SMARTY_AUTO_ESCAPE') || SMARTY_AUTO_ESCAPE)) {
-            $view->enableAutoEscape();
+        if ($view instanceof SC_View) {
+            $view->enableAutoEscapeByConfig();
         }
         $this->view = $view;
     }

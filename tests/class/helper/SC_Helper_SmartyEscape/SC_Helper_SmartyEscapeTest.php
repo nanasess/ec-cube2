@@ -69,6 +69,8 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             ['$v|h|dispCurrency', '$v|h|dispCurrency'],
             // C6
             ['$tpl_onload', '$tpl_onload|script_escape nofilter'],
+            ['$redirect_html', '$redirect_html|script_escape nofilter'],
+            ['$redirect_html|h', '$redirect_html|h nofilter'],
             ['$tpl_payment_onload', '$tpl_payment_onload|script_escape nofilter'],
             ['$paygent_token_js_url', '$paygent_token_js_url|script_escape nofilter'],
             ['$tpl_onload_x', '$tpl_onload_x'],

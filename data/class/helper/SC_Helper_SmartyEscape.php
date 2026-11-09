@@ -56,7 +56,7 @@
 class SC_Helper_SmartyEscape
 {
     /** 互換規則のバージョン. 規則を変えたら上げる (compile_id に反映される). */
-    public const VERSION = '11';
+    public const VERSION = '12';
 
     /** C4 で使う modifier 名 */
     public const MODIFIER_ERROR = 'h_allow_br';
@@ -133,6 +133,8 @@ class SC_Helper_SmartyEscape
         'paidy_js',
         'paygent_token_connect_url',
         'paygent_token_js_url',
+        // 既存の拡張 (決済モジュール等) で, 決済代行会社が返した支払画面へのフォームの HTML を入れている変数
+        'redirect_html',
         // 既存の拡張 (決済モジュール等) で, PHP で組み立てた JSON を入れている変数
         'arrDeliv',
         'json_jaccs_payment_charge_data',

@@ -30,6 +30,8 @@
  * - C1: `h` を含む既知の modifier 列に nofilter を補う. `h` の後の `default` の代替値は `h` で保護する.
  * - C3: `h` を伴わない `nl2br` / `nl2br_html` で終わる出力は従来どおり (`|script_escape nofilter`) とする.
  *       決済モジュールが決済情報 (arrOther) に入れるリンク等の HTML, 商品説明の HTML を保持するため.
+ *       決済情報の項目名 (`$item.name`) も決済モジュールが HTML を入れるため, 本体の完了画面のテンプレートで
+ *       `|script_escape nofilter` を明示している.
  * - C4: modifier なしの `$arrErr…` と, エラーメッセージ系の名前 (err / msg / mess を含む) の変数は,
  *       エスケープ後に `<br>` だけを戻す modifier を通す. C6 の変数は C6 を, script 要素の中のエラーメッセージ系の名前は C8 を優先する.
  * - C5: 固定の属性文字列や HTML を返す modifier (sfGetChecked 等) で終わる出力に nofilter を補う.

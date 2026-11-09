@@ -47,13 +47,16 @@
  * - C9: C1〜C8 で nofilter を補う出力タグと, テンプレートに nofilter が書かれた出力タグの html モードの `escape`
  *       (引数なし / 'html') を `escape:'force'` にする. Smarty は自動エスケープを有効にすると html モードの `escape` を
  *       何もしない式にするため, そのままでは `|escape|nl2br` 等がエスケープされずに出力される.
+ * - C10: `wordwrap` の区切りに `<br>` のリテラルを指定した出力 (`|wordwrap:幅:'<br />'[:真偽]` だけのもの) は,
+ *       改行で折り返してから `h` でエスケープし, `nl2br` で改行を `<br />` にする (`|wordwrap:幅:"\n"[:真偽]|h|nl2br nofilter`).
+ *       区切りの `<br>` を保ったまま, 値はエスケープされる. 値に元からある改行も `<br />` になる.
  *
  * C2 (画面出力の View だけを自動エスケープ対象にする) は SC_Display / SC_View 側で扱う.
  */
 class SC_Helper_SmartyEscape
 {
     /** 互換規則のバージョン. 規則を変えたら上げる (compile_id に反映される). */
-    public const VERSION = '10';
+    public const VERSION = '11';
 
     /** C4 で使う modifier 名 */
     public const MODIFIER_ERROR = 'h_allow_br';
@@ -346,6 +349,10 @@ class SC_Helper_SmartyEscape
             }
             $expr = $this->protectDefaultArguments($expr, $p['modifiers'], $hPos);
             $suffix = ' nofilter';
+        } elseif ($names === ['wordwrap'] && ($wrap = $this->getWordwrapBrArguments($expr, $p['modifiers'][0])) !== null) {
+            // C10
+            $expr = substr($expr, 0, $p['modifiers'][0]['start']).'|wordwrap:'.implode(':', $wrap).'|h|nl2br';
+            $suffix = ' nofilter';
         } elseif ($last === 'nl2br' || $last === 'nl2br_html') {
             // C3
             $suffix = '|script_escape nofilter';
@@ -555,6 +562,31 @@ class SC_Helper_SmartyEscape
         }
 
         return $expr;
+    }
+
+    /**
+     * `|wordwrap:幅:'<br />'[:真偽]` の形なら, 区切りを改行に替えた引数を返す (C10). 対象外なら null.
+     * 幅は数値, 区切りは `<br>` / `<br />` のリテラル, 第 3 引数は真偽値・数値のリテラルに限る.
+     *
+     * @param array{name: string, start: int, end: int} $modifier
+     *
+     * @return array<int, string>|null
+     */
+    protected function getWordwrapBrArguments($expr, array $modifier)
+    {
+        $args = array_map('trim', $this->splitArguments(substr($expr, $modifier['start'], $modifier['end'] - $modifier['start'])));
+        if (count($args) < 3 || count($args) > 4) {
+            return null;
+        }
+        if (!preg_match('/^\d+$/', $args[1]) || !preg_match('/^([\'"])<br\s*\/?>\1$/i', $args[2])) {
+            return null;
+        }
+        if (isset($args[3]) && !preg_match('/^(?:true|false|0|1)$/i', $args[3])) {
+            return null;
+        }
+        $args[2] = '"\n"';
+
+        return array_slice($args, 1);
     }
 
     /**

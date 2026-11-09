@@ -29,6 +29,17 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             // h の後に未知の modifier が続くものは対象外 (自動エスケープを維持)
             ['$v|h|cat:"#x"', '$v|h|cat:"#x"'],
             ['$v|h|sfDispDBDate', '$v|h|sfDispDBDate'],
+            // C10
+            ["\$v|wordwrap:75:'<br/>':true", '$v|wordwrap:75:"\\n":true|h|nl2br nofilter'],
+            ['$v|wordwrap:10:"<br />"', '$v|wordwrap:10:"\\n"|h|nl2br nofilter'],
+            ["\$v|wordwrap:10:'<BR>':false", '$v|wordwrap:10:"\\n":false|h|nl2br nofilter'],
+            // 区切りが <br> のリテラルでないもの, 幅・第 3 引数がリテラルでないものは対象外 (自動エスケープを維持)
+            ["\$v|wordwrap:10:'<b>':true", "\$v|wordwrap:10:'<b>':true"],
+            ["\$v|wordwrap:10:'<br onload=x>'", "\$v|wordwrap:10:'<br onload=x>'"],
+            ['$v|wordwrap:10:$sep:true', '$v|wordwrap:10:$sep:true'],
+            ["\$v|wordwrap:\$n:'<br/>'", "\$v|wordwrap:\$n:'<br/>'"],
+            ["\$v|wordwrap:10:'<br/>':\$cut", "\$v|wordwrap:10:'<br/>':\$cut"],
+            ['$v|wordwrap:10', '$v|wordwrap:10'],
             // C3
             ['$v|nl2br', '$v|nl2br|script_escape nofilter'],
             ['$v|nl2br_html', '$v|nl2br_html|script_escape nofilter'],
@@ -211,6 +222,7 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             'h|default の代替値を保護' => ['<!--{$v|h|default:$f}-->', ['v' => '', 'f' => '<i>'], '&lt;i&gt;'],
             'arrErr の br を保持' => ['<!--{$arrErr.x}-->', ['arrErr' => ['x' => '※ <b>A</b>が未入力です。<br />']], '※ &lt;b&gt;A&lt;/b&gt;が未入力です。<br />'],
             'エラー系の変数名の br を保持' => ['<!--{$plg_msg}-->', ['plg_msg' => '決済エラー<br>"x" <script>alert(1)</script>'], '決済エラー<br />&quot;x&quot; &lt;script&gt;alert(1)&lt;/script&gt;'],
+            'wordwrap の <br> 区切り' => ['<!--{$v|wordwrap:4:"<br />":true}-->', ['v' => '<i>"&\'x'], "&lt;i&gt;&quot;<br />\n&amp;&#039;x"],
             'nl2br は従来どおり' => ['<!--{$v|nl2br}-->', ['v' => "<a href=\"/\">x</a>\n2"], "<a href=\"/\">x</a><br />\n2"],
             'tpl_onload は従来どおり' => ['<!--{$tpl_onload}-->', ['tpl_onload' => "fnOnLoad('a');"], "fnOnLoad('a');"],
             'sfGetChecked' => ['<!--{1|sfGetChecked:$v}-->', ['v' => '1'], 'checked="checked"'],

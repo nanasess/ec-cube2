@@ -63,7 +63,7 @@ class SC_Helper_SmartyEscape
     // ------------------------------------------------------------------
 
     /** 互換規則のバージョン. 規則を変えたら上げる (compile_id に反映される). */
-    public const VERSION = '17';
+    public const VERSION = '18';
 
     /** C4 で使う modifier 名 */
     public const MODIFIER_ERROR = 'h_allow_br';
@@ -826,7 +826,8 @@ class SC_Helper_SmartyEscape
         }
         $mode = trim($args[1]);
         if (preg_match('/^([\'"])(\w+)\1$/', $mode, $m) || preg_match('/^(\w+)$/', $mode, $m)) {
-            return strtolower(end($m));
+            // Smarty はモード名の大文字・小文字を区別する (`escape:'HTML'` は html モードにならない) ので, そのまま返す
+            return end($m);
         }
 
         return null;
@@ -886,7 +887,7 @@ class SC_Helper_SmartyEscape
      * コンパイルする (smarty-php/smarty#1188). 出力時に自動エスケープが掛かる場合はそれで良いが, nofilter を付けた出力や,
      * 変数に代入したり {include} や関数の引数に渡したりしてから nofilter 等で出力する場合, 同じ式の中の別の modifier が
      * 自動エスケープを止める場合 (`escape:'url'` 等) は, 値がエスケープされずに出力されてしまう.
-     * テンプレートの書き方ごとに対処すると漏れが生出力になるため, コンパイラの側で html を 'force' (常にエスケープ) として扱う.
+     * テンプレートの書き方ごとに対処すると漏れが生出力になるため, コンパイラの側で html モードを常にエスケープさせる.
      * これで `escape` の値は, タグの種類や式の中の位置に関係なく従来と同じになる.
      * 自動エスケープされる出力では二重エスケープになるので, 出力タグの `escape` は C1 で `h` と同じように nofilter を補う.
      *
@@ -908,14 +909,22 @@ class SC_Helper_SmartyEscape
                     public function compile($params, Smarty\Compiler\Template $compiler)
                     {
                         try {
-                            if ($this->literal_compiler_param($params, 1, 'html') === 'html') {
-                                $params[1] = "'force'";
-                            }
+                            $mode = $this->literal_compiler_param($params, 1, 'html');
                         } catch (Smarty\Exception $e) {
                             // 第 1 引数がリテラルでない (`escape:$mode`). Smarty が実行時の escape 関数を呼ぶのでそのままで良い
+                            return parent::compile($params, $compiler);
                         }
+                        if ($mode !== 'html' && $mode !== 'force') {
+                            return parent::compile($params, $compiler);
+                        }
+                        // 文字コード・double_encode がリテラルでなくても (`escape:'html':$charset`) エスケープされるように,
+                        // 親クラスには渡さず, 引数の式をそのまま使って htmlspecialchars() を組み立てる.
+                        // (親クラスはリテラルでない引数があると実行時の escape 関数に任せるが, そちらは 'force' を知らない)
+                        $default = var_export(Smarty\Smarty::$_CHARSET, true);
+                        $charset = isset($params[2]) ? '(('.$params[2].') ?: '.$default.')' : $default;
+                        $doubleEncode = isset($params[3]) ? '(bool) ('.$params[3].')' : 'true';
 
-                        return parent::compile($params, $compiler);
+                        return 'htmlspecialchars((string) '.$params[0].', ENT_QUOTES, '.$charset.', '.$doubleEncode.')';
                     }
                 };
             }

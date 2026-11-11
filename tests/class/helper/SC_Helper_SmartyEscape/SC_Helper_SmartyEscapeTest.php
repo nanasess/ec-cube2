@@ -107,6 +107,9 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             ["\$v|escape:'html':null:0", "\$v|escape:'html':null:0|script_escape nofilter"],
             ['$v|escape:"html":"UTF-8":true', '$v|escape:"html":"UTF-8":true|script_escape nofilter'],
             ['$v|escape:"html":"UTF-8":$flag', '$v|escape:"html":"UTF-8":$flag|script_escape nofilter'],
+            // モード名は Smarty と同じく大文字・小文字を区別する (html モードでないものに nofilter を補わない)
+            ['$v|escape:"HTML"', '$v|escape:"HTML"'],
+            ['$v|escape:"Html"|default:$f', '$v|escape:"Html"|default:$f'],
             // C1 (escape の後に許可リスト外の modifier が続くものは変換しない. 二重エスケープになるが生出力にはならない)
             ['$v|escape|upper', '$v|escape|upper'],
             ['$v|escape|sfViewPriceTax', '$v|escape|sfViewPriceTax'],
@@ -288,6 +291,13 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             'escape|default の代替値を保護' => ['<!--{$v|escape|default:$f}-->', ['v' => '', 'f' => '<i>'], '&lt;i&gt;'],
             // script 要素の中: JS の文字列に戻したときに, 従来は置き換えていたタグが残らない
             'script 内の値を innerHTML に入れる場合' => ['<script>x.innerHTML="<!--{$v}-->";</script>', ['v' => '<img src=x onerror=alert(1)>'], '<script>x.innerHTML="#script escaped#";</script>'],
+            // 文字コード・double_encode がリテラルでなくてもエスケープされる
+            'escape の double_encode が変数' => ['<!--{$v|escape:"html":"UTF-8":$flag}-->', ['v' => '<i>&amp;', 'flag' => false], '&lt;i&gt;&amp;'],
+            'escape の文字コードが変数' => ['<!--{$v|escape:"html":$cs}-->', ['v' => '<i>&amp;', 'cs' => 'UTF-8'], '&lt;i&gt;&amp;amp;'],
+            'escape の文字コードが変数 (nofilter)' => ['<!--{$v|escape:"html":$cs nofilter}-->', ['v' => '<i>', 'cs' => null], '&lt;i&gt;'],
+            'escape の引数が変数の値を代入' => ['<!--{assign var=x value=$v|escape:"html":"UTF-8":$flag}--><!--{$x nofilter}-->', ['v' => '<i>', 'flag' => true], '&lt;i&gt;'],
+            'escape:force の引数が変数' => ['<!--{$v|escape:"force":"UTF-8":$flag}-->', ['v' => '<i>', 'flag' => true], '&lt;i&gt;'],
+            'モード名の大文字は html モードではない' => ['<!--{$v|escape:"HTML"}-->', ['v' => '<i>'], '&lt;i&gt;'],
             'double_encode=false を維持' => ['<!--{$v|escape:"html":"UTF-8":false}-->', ['v' => 'A&amp;B <i>'], 'A&amp;B &lt;i&gt;'],
             '括弧の中の escape|nl2br' => ['<!--{($v|escape)|nl2br}-->', ['v' => $v], $esc."<br />\n2"],
             'modifier の引数の中の escape' => ['<!--{$v|cat:($w|escape)|nl2br}-->', ['v' => "<i>\n", 'w' => '<u>'], "<i><br />\n&lt;u&gt;"],

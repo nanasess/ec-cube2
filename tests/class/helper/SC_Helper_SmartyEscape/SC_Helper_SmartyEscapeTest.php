@@ -106,7 +106,22 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             ['$v|escape:"htmlall"|nl2br', '$v|escape:"htmlall"|nl2br|script_escape nofilter'],
             ['$v|escape:"url" nofilter', '$v|escape:"url" nofilter'],
             ['$v|escape|upper', '$v|escape|upper'],
-            ['$v|escape assign=w', '$v|escape assign=w'],
+            // C9 (変数に代入してから nofilter / nl2br で出力すると生出力になるため, 代入する式も対象にする)
+            ['$v|escape assign=w', "\$v|escape:'force' assign=w"],
+            ['$v|escape:"html" assign=w', "\$v|escape:'force' assign=w"],
+            ['$v|escape:"url" assign=w', '$v|escape:"url" assign=w'],
+            ['assign var=w value=$v|escape', "assign var=w value=\$v|escape:'force'"],
+            ['assign var=w value=$v|escape:"javascript"', 'assign var=w value=$v|escape:"javascript"'],
+            // C9 (括弧の中・modifier の引数の中も対象)
+            ['($v|escape)|nl2br', "(\$v|escape:'force')|nl2br|script_escape nofilter"],
+            ['$v|cat:($w|escape)|nl2br', "\$v|cat:(\$w|escape:'force')|nl2br|script_escape nofilter"],
+            ['($v|escape)|cat:"x" nofilter', "(\$v|escape:'force')|cat:\"x\" nofilter"],
+            // C9 (引用符の中, 別の modifier 名, nofilter にならない出力, モードが変数のものは書き換えない)
+            ['$v|cat:"|escape"|nl2br', '$v|cat:"|escape"|nl2br|script_escape nofilter'],
+            ['$v|escape_js nofilter', '$v|escape_js nofilter'],
+            ['$v|escape:$mode|nl2br', '$v|escape:$mode|nl2br|script_escape nofilter'],
+            ['if $v|escape == "a"', 'if $v|escape == "a"'],
+            ['include file="a.tpl" x=$v|escape', 'include file="a.tpl" x=$v|escape'],
             // 変換しないもの
             ['$v', '$v'],
             ['$v|h nofilter', '$v|h nofilter'],
@@ -152,7 +167,8 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
 
     public function testTransformIsIdempotent()
     {
-        $source = '<!--{$v|h}--><!--{$arrErr.x}--><!--{$v|h|default:$f}--><!--{$tpl_onload}--><!--{$v|escape|nl2br}--><!--{$v|escape nofilter}-->';
+        $source = '<!--{$v|h}--><!--{$arrErr.x}--><!--{$v|h|default:$f}--><!--{$tpl_onload}--><!--{$v|escape|nl2br}--><!--{$v|escape nofilter}-->'
+            .'<!--{$v|escape assign=x}--><!--{assign var=y value=$v|escape}--><!--{($v|escape)|nl2br}-->';
         $once = $this->objHelper->transform($source);
         $this->assertSame($once, $this->objHelper->transform($once));
     }
@@ -233,6 +249,12 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             'escape:html|nl2br_html' => ['<!--{$v|escape:"html"|nl2br_html}-->', ['v' => $v], $esc."<br />\n2"],
             'escape|nl2br nofilter' => ['<!--{$v|escape|nl2br nofilter}-->', ['v' => $v], $esc."<br />\n2"],
             'escape (二重にしない)' => ['<!--{$v|escape}-->', ['v' => $v], $esc."\n2"],
+            'escape を代入して nofilter で出力' => ['<!--{$v|escape assign=x}--><!--{$x nofilter}-->', ['v' => $v], $esc."\n2"],
+            'escape を assign で代入して nl2br で出力' => ['<!--{assign var=x value=$v|escape}--><!--{$x|nl2br}-->', ['v' => $v], $esc."<br />\n2"],
+            // 代入した変数を自動エスケープのまま出力すると二重エスケープになる (生出力になるよりは安全側)
+            'escape を代入して自動エスケープで出力' => ['<!--{$v|escape assign=x}--><!--{$x}-->', ['v' => '<i>'], '&amp;lt;i&amp;gt;'],
+            '括弧の中の escape|nl2br' => ['<!--{($v|escape)|nl2br}-->', ['v' => $v], $esc."<br />\n2"],
+            'modifier の引数の中の escape' => ['<!--{$v|cat:($w|escape)|nl2br}-->', ['v' => "<i>\n", 'w' => '<u>'], "<i><br />\n&lt;u&gt;"],
             'hexentity' => ["<!--{\$v|escape:'hexentity'}-->", ['v' => 'a@'], '&#x61;&#x40;'],
             '条件式の h の後の出力' => ['<!--{if $v|h != ""}--><!--{/if}--><!--{$v}-->', ['v' => '<i>'], '&lt;i&gt;'],
             '代入の h の後の出力' => ['<!--{assign var=w value=$v|h}--><!--{$v}-->', ['v' => '<i>'], '&lt;i&gt;'],

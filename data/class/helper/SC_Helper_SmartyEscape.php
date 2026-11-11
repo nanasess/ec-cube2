@@ -42,7 +42,7 @@
  *   C6  HTML/JS 断片や JSON を入れる慣習の変数                → |script_escape nofilter (従来どおり)
  *   C7  自動エスケープと重ねると壊れる `escape` のモード       → nofilter (javascript は |script_escape nofilter)
  *   C8  script 要素の中の modifier なしの出力                 → |escape_js|script_escape nofilter (JS の文字列用にエスケープ)
- *   C9  nofilter になる出力タグの html モードの `escape`      → escape:'force' (Smarty が何もしない式にするため)
+ *   C9  nofilter になる出力と変数に代入する式の html モードの `escape` → escape:'force' (Smarty が何もしない式にするため)
  *   C10 `wordwrap` の区切りに `<br>` を指定した出力            → |wordwrap:幅:"\n"|h|nl2br nofilter
  *
  * `h` を含む出力は C1 だけで判定する. それ以外は $arrRules の順に試し, 最初に当たった規則だけを使う.
@@ -54,7 +54,7 @@ class SC_Helper_SmartyEscape
     // ------------------------------------------------------------------
 
     /** 互換規則のバージョン. 規則を変えたら上げる (compile_id に反映される). */
-    public const VERSION = '12';
+    public const VERSION = '13';
 
     /** C4 で使う modifier 名 */
     public const MODIFIER_ERROR = 'h_allow_br';
@@ -345,14 +345,14 @@ class SC_Helper_SmartyEscape
     public function transformTag($inner, $inScript = false)
     {
         $tag = $this->parse($inner);
-        if ($tag === null || preg_match('/\bassign\s*=/', $tag['attrs'])) {
-            // 出力タグでない, 最上位に演算子がある式, 変数への代入は変換しない
-            return $inner;
+        if ($tag === null) {
+            // 出力タグでない (関数タグ・条件式など), または最上位に演算子がある式.
+            // 変数に代入する {assign} と, nofilter / assign= を書いたものには C9 だけを掛ける
+            return $this->isAssignOrNofilterTag($inner) ? $this->forceHtmlEscape($inner) : $inner;
         }
-        $tag = $this->forceHtmlEscape($tag);
-        if (preg_match('/\bnofilter\b/', $tag['attrs'])) {
-            // nofilter が書かれた出力は規則を試さない (C9 だけを掛ける)
-            return $tag['expr'].$tag['attrs'].$tag['tail'];
+        if (preg_match('/\b(nofilter|assign\s*=)/', $tag['attrs'])) {
+            // nofilter が書かれた出力と変数への代入は規則を試さない (C9 だけを掛ける)
+            return $this->forceHtmlEscape($inner);
         }
         $tag['inScript'] = $inScript;
         if (in_array('h', $tag['names'], true)) {
@@ -389,7 +389,8 @@ class SC_Helper_SmartyEscape
         $body = rtrim($expr);
         $space = substr($expr, strlen($body)); // 式と属性の間の空白はそのまま残す
 
-        return $body.$modifiers.$space.$tag['attrs'].' nofilter'.$tag['tail'];
+        // nofilter を補うので, 式の中の html モードの escape が効くようにする (C9)
+        return $this->forceHtmlEscape($body.$modifiers.$space.$tag['attrs'].' nofilter'.$tag['tail']);
     }
 
     // ------------------------------------------------------------------
@@ -840,34 +841,67 @@ class SC_Helper_SmartyEscape
     // ------------------------------------------------------------------
 
     /**
-     * C9: 最上位の modifier 列にある html モードの `escape` (引数なし / 'html') を `escape:'force'` にする.
-     * Smarty は自動エスケープを有効にすると html モードの `escape` を何もしない式にコンパイルするため,
-     * nofilter と組み合わせると値がエスケープされずに出力される. 書き換えた場合は分解し直した結果を返す.
+     * 変数に代入するタグ ({assign …} / assign=…) か, nofilter を書いたタグか.
+     * 出力タグとして分解できないタグ (最上位に演算子がある式など) に C9 を掛けるかの判定に使う.
      *
-     * @param array $tag parse() の結果
+     * @param string $inner 区切り記号を除いたタグの中身
      *
-     * @return array parse() の結果
+     * @return bool
      */
-    protected function forceHtmlEscape(array $tag)
+    protected function isAssignOrNofilterTag($inner)
     {
-        $expr = $tag['expr'];
-        // 後ろから置換して, 前にある modifier の位置をずらさない
-        for ($i = count($tag['modifiers']) - 1; $i >= 0; $i--) {
-            $m = $tag['modifiers'][$i];
-            $segment = $this->segment($tag, $i);
-            if ($m['name'] !== 'escape' || $this->escapeMode($segment) !== 'html') {
+        return (bool) preg_match('/^\s*assign\b|\s(?:nofilter\b|assign\s*=)/', $inner);
+    }
+
+    /**
+     * C9: タグの中の html モードの `escape` (引数なし / 'html') を `escape:'force'` にする.
+     *
+     * Smarty は自動エスケープを有効にすると html モードの `escape` を何もしない式にコンパイルする
+     * (smarty-php/smarty#1188). 出力時に自動エスケープが掛かる場合はそれで良いが, nofilter を付けた出力や,
+     * 変数に代入してから nofilter / C3 等で出力する場合は, 値がエスケープされずに出力されてしまう.
+     * そのため nofilter になるタグと変数に代入するタグでは, 括弧の中や modifier の引数の中も含めて `escape:'force'` にする.
+     * 代入した変数を自動エスケープのまま出力すると二重エスケープになるが, 生出力になるよりは安全側である.
+     *
+     * 引用符で囲まれた文字列は読み飛ばす. 第 1 引数がリテラルでない (`escape:$mode`) ものは, Smarty が実行時の
+     * escape 関数を呼ぶためそのままでエスケープされる. ダブルクォート文字列の中の埋め込み式 (`` "`$v|escape`" ``) は対象外.
+     *
+     * @param string $code タグの中身
+     *
+     * @return string
+     */
+    protected function forceHtmlEscape($code)
+    {
+        // `|escape` に一致し, 引数なし (後ろが modifier の区切り・空白・閉じ括弧・終端) か, 第 1 引数が html のリテラルの
+        // ときだけ一致する. 一致した `:html` は `:'force'` に置き換え, 2 つ目以降の引数 (文字コード等) はそのまま残す
+        static $pattern = '/\G(\|\s*@?escape)(?::(["\']?)html\2(?=[:|\s)\]]|$)|(?=[|\s)\]]|$))/i';
+        $out = '';
+        $quote = null;
+        $len = strlen($code);
+        for ($i = 0; $i < $len; $i++) {
+            $c = $code[$i];
+            if ($quote !== null) {
+                // 引用符の中はそのまま写す
+                if ($c === '\\' && $i + 1 < $len) {
+                    $out .= $c.$code[++$i];
+                    continue;
+                }
+                if ($c === $quote) {
+                    $quote = null;
+                }
+                $out .= $c;
                 continue;
             }
-            $body = rtrim($segment);
-            $args = $this->splitArguments($body);
-            $args[1] = "'force'";
-            $expr = substr($expr, 0, $m['start']).implode(':', $args).substr($segment, strlen($body)).substr($expr, $m['end']);
-        }
-        if ($expr === $tag['expr']) {
-            return $tag;
+            if ($c === '"' || $c === "'") {
+                $quote = $c;
+            } elseif ($c === '|' && preg_match($pattern, $code, $m, 0, $i)) {
+                $out .= $m[1].":'force'";
+                $i += strlen($m[0]) - 1;
+                continue;
+            }
+            $out .= $c;
         }
 
-        return $this->parse($expr.$tag['attrs'].$tag['tail']) ?: $tag;
+        return $out;
     }
 
     // ------------------------------------------------------------------

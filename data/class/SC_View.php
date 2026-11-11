@@ -125,6 +125,8 @@ class SC_View
         $this->_smarty->setEscapeHtml(true);
         // 既定の modifier (script_escape) は残し, 自動エスケープと併用する (javascript: の URL 等は HTML エスケープでは防げない).
         // 互換変換で nofilter を補う出力は既定の modifier も外れるため, 互換変換が script_escape を明示する.
+        // html モードの escape を従来どおり常にエスケープさせる (Smarty の標準の拡張より先に引かれるように先頭に置く)
+        $this->_smarty->setExtensions(array_merge([SC_Helper_SmartyEscape_Ex::createExtension()], $this->_smarty->getExtensions()));
         $objCompat = new SC_Helper_SmartyEscape_Ex($this->_smarty->getLeftDelimiter(), $this->_smarty->getRightDelimiter());
         $this->_smarty->registerFilter('pre', [$objCompat, 'prefilter']);
         // 互換規則の変更でコンパイル済みテンプレートを分ける

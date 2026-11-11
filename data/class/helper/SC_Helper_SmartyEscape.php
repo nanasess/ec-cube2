@@ -25,7 +25,7 @@
  * Smarty の自動エスケープ (escape_html) を有効にしたときの, 既存テンプレートとの互換変換.
  *
  * prefilter としてコンパイル対象のソースだけを変換する. 保存済みのテンプレートは書き換えない.
- * 変換するのは出力タグ (変数・式を直接出力するタグ) だけで, 条件式・代入・関数の引数は変更しない.
+ * 出力タグ (変数・式を直接出力するタグ) を変換する. 条件式・代入・関数の引数は html モードの `escape` だけを変換する (C9).
  *
  * 処理の流れ:
  *   transform()    テンプレートのソースを走査し, タグごとに transformTag() を呼ぶ.
@@ -34,17 +34,20 @@
  *                  どの規則にも当たらない出力タグは変更せず, Smarty の自動エスケープに任せる.
  *
  * 規則 (番号は PR の説明と共通. 詳細は各 rule メソッドのコメント):
- *   C1  `h` を含む既知の modifier 列                         → nofilter を補う (二重エスケープを避ける)
+ *   C1  `h` を含む既知の modifier 列                         → nofilter (二重エスケープを避ける)
  *   C2  画面出力の View だけを自動エスケープの対象にする      → SC_Display / SC_View 側で扱う
- *   C3  `nl2br` / `nl2br_html` で終わる出力                   → |script_escape nofilter (従来どおり)
+ *   C3  `nl2br` / `nl2br_html` で終わる出力                   → nofilter (従来どおり)
  *   C4  `$arrErr…` と, エラーメッセージ系の名前の変数         → |h_allow_br nofilter (エスケープして <br> だけ戻す)
  *   C5  固定の属性文字列や HTML を返す modifier で終わる出力   → nofilter
- *   C6  HTML/JS 断片や JSON を入れる慣習の変数                → |script_escape nofilter (従来どおり)
- *   C7  自動エスケープと重ねると壊れる `escape` のモード       → nofilter (javascript は |script_escape nofilter.
- *       html モードは double_encode=false を明示したものだけ)
- *   C8  script 要素の中の modifier なしの出力                 → |escape_js|script_escape nofilter (JS の文字列用にエスケープ)
- *   C9  nofilter になる出力と変数に代入する式の html モードの `escape` → escape:'force' (Smarty が何もしない式にするため)
+ *   C6  HTML/JS 断片や JSON を入れる慣習の変数                → nofilter (従来どおり)
+ *   C7  自動エスケープと重ねると壊れる `escape` のモード       → nofilter (html モードは double_encode=false を明示したものだけ)
+ *   C8  script 要素の中の modifier なしの出力                 → |escape_js nofilter (JS の文字列用にエスケープ)
+ *   C9  自動エスケープが掛からないタグ (nofilter になる出力・代入・関数タグ) の html モードの `escape` → escape:'force'
+ *       (Smarty が何もしない式にするため)
  *   C10 `wordwrap` の区切りに `<br>` を指定した出力            → |wordwrap:幅:"\n"|h|nl2br nofilter
+ *
+ * 従来の保護 (既定の modifier の script_escape) は自動エスケープと併用する. nofilter を付けると既定の modifier も外れるため,
+ * 規則で nofilter を補う出力には `|script_escape` を明示する (上の表の nofilter はすべて `|script_escape nofilter`).
  *
  * `h` を含む出力は C1 だけで判定する. それ以外は $arrRules の順に試し, 最初に当たった規則だけを使う.
  */
@@ -55,7 +58,7 @@ class SC_Helper_SmartyEscape
     // ------------------------------------------------------------------
 
     /** 互換規則のバージョン. 規則を変えたら上げる (compile_id に反映される). */
-    public const VERSION = '14';
+    public const VERSION = '16';
 
     /** C4 で使う modifier 名 */
     public const MODIFIER_ERROR = 'h_allow_br';
@@ -116,7 +119,7 @@ class SC_Helper_SmartyEscape
     public static $arrRawEscapeModes = [
         'hexentity' => '',
         'decentity' => '',
-        'javascript' => '|script_escape',
+        'javascript' => '',
     ];
 
     /**
@@ -348,8 +351,8 @@ class SC_Helper_SmartyEscape
         $tag = $this->parse($inner);
         if ($tag === null) {
             // 出力タグでない (関数タグ・条件式など), または最上位に演算子がある式.
-            // 変数に代入する {assign} と, nofilter / assign= を書いたものには C9 だけを掛ける
-            return $this->isAssignOrNofilterTag($inner) ? $this->forceHtmlEscape($inner) : $inner;
+            // 自動エスケープが掛からないタグ (関数タグ・代入・nofilter / assign= 付き) には C9 だけを掛ける
+            return $this->isNotAutoEscapedTag($inner) ? $this->forceHtmlEscape($inner) : $inner;
         }
         if (preg_match('/\b(nofilter|assign\s*=)/', $tag['attrs'])) {
             // nofilter が書かれた出力と変数への代入は規則を試さない (C9 だけを掛ける)
@@ -377,11 +380,11 @@ class SC_Helper_SmartyEscape
     }
 
     /**
-     * 規則の結果からタグの中身を組み立てる. 式の後ろに modifier を足し, 属性の後ろに nofilter を足す.
+     * 規則の結果からタグの中身を組み立てる. 式の後ろに modifier と script_escape を足し, 属性の後ろに nofilter を足す.
      *
      * @param array $tag parse() の結果
      * @param string $expr 書き換えた式
-     * @param string $modifiers 補う modifier (`|script_escape` 等. 無ければ空文字)
+     * @param string $modifiers 補う modifier (`|escape_js` 等. 無ければ空文字). script_escape は常に最後に補う
      *
      * @return string
      */
@@ -389,6 +392,8 @@ class SC_Helper_SmartyEscape
     {
         $body = rtrim($expr);
         $space = substr($expr, strlen($body)); // 式と属性の間の空白はそのまま残す
+        // nofilter を付けると既定の modifier (script_escape) も外れるので, 従来どおり最後に掛ける
+        $modifiers .= '|script_escape';
 
         // nofilter を補うので, 式の中の html モードの escape が効くようにする (C9)
         return $this->forceHtmlEscape($body.$modifiers.$space.$tag['attrs'].' nofilter'.$tag['tail']);
@@ -439,7 +444,7 @@ class SC_Helper_SmartyEscape
     }
 
     /**
-     * C3: `h` を伴わない `nl2br` / `nl2br_html` で終わる出力は従来どおり (|script_escape) とする.
+     * C3: `h` を伴わない `nl2br` / `nl2br_html` で終わる出力は従来どおり (script_escape のみ) とする.
      * 決済モジュールが決済情報 (arrOther) に入れるリンク等の HTML, 商品説明の HTML を保持するため.
      * 決済情報の項目名 (`$item.name`) も決済モジュールが HTML を入れるため, 本体の完了画面のテンプレートで
      * `|script_escape nofilter` を明示している.
@@ -452,7 +457,7 @@ class SC_Helper_SmartyEscape
             return null;
         }
 
-        return [$tag['expr'], '|script_escape'];
+        return [$tag['expr'], ''];
     }
 
     /**
@@ -513,7 +518,7 @@ class SC_Helper_SmartyEscape
 
     /**
      * C6: HTML/JS 断片や JSON を入れる慣習の変数 ($arrRawVariables) を, 添字・プロパティなしで
-     * modifier なし (または `default` だけ) で出力する場合は従来どおり (|script_escape) とする.
+     * modifier なし (または `default` だけ) で出力する場合は従来どおり (script_escape のみ) とする.
      * 添字・プロパティ付きは対象外 (本体で配列として使う名前 (arrDeliv 等) の要素を素の出力にしない).
      * `default` の代替値はエスケープされずに出力されるため, リテラルの場合だけ対象にする.
      *
@@ -531,12 +536,12 @@ class SC_Helper_SmartyEscape
             return null;
         }
 
-        return [$tag['expr'], '|script_escape'];
+        return [$tag['expr'], ''];
     }
 
     /**
      * C8: JavaScript の script 要素の中にある, modifier なし (または `default` だけ) の出力は,
-     * HTML ではなく JavaScript の文字列用にエスケープする (|escape_js|script_escape).
+     * HTML ではなく JavaScript の文字列用にエスケープする (|escape_js).
      * HTML 用のエスケープでは JS の文字列が `&amp;` 等に化けるため.
      * script 要素の開始・終了は同じテンプレートのソースの中で判定する (scanScript). 判定できない場合は通常の自動エスケープになる.
      * escape_js は `<` `>` `&` 引用符等も `\x3c` 形式にするため, 判定を誤って HTML の中に出力しても HTML として解釈されない.
@@ -551,7 +556,7 @@ class SC_Helper_SmartyEscape
             return null;
         }
 
-        return [$tag['expr'], '|'.static::MODIFIER_SCRIPT.'|script_escape'];
+        return [$tag['expr'], '|'.static::MODIFIER_SCRIPT];
     }
 
     /**
@@ -864,22 +869,24 @@ class SC_Helper_SmartyEscape
     // ------------------------------------------------------------------
 
     /**
-     * 変数に代入するタグか, nofilter を書いたタグか (C9 の対象).
-     * 出力タグとして分解できないタグ (最上位に演算子がある式など) に C9 を掛けるかの判定に使う.
+     * Smarty の自動エスケープが掛からないタグか (C9 の対象).
+     * 出力タグとして分解できないタグ (関数タグ, 最上位に演算子がある式など) に C9 を掛けるかの判定に使う.
      *
-     * 代入は次の 3 つの形を見る.
-     *   - 関数タグ {assign var=… value=…} / {append var=… value=…}
-     *   - 省略形 {$x = …} / {$x.k = …} / {$x[$i] = …} (比較の `==` `!=` `<=` `>=` `===` は代入ではない)
-     *   - 出力タグの assign= 属性
+     * 次の形を見る.
+     *   - 関数タグ・ブロックタグ ({if …} / {assign …} / {include …} / プラグインの関数など. タグ名の後ろが空白か終端).
+     *     条件式や引数の値は出力されないので自動エスケープが掛からず, 渡した先で nofilter / C3 等で出力されうる.
+     *     `{count($x)}` や `{Foo::bar()}` のように式を出力するタグは, タグ名の後ろが空白でないので含まない
+     *   - 代入の省略形 {$x = …} / {$x.k = …} / {$x[$i] = …} (比較の `==` `!=` `<=` `>=` `===` は代入ではない)
+     *   - nofilter / assign= 属性を書いた出力タグ
      *
      * @param string $inner 区切り記号を除いたタグの中身
      *
      * @return bool
      */
-    protected function isAssignOrNofilterTag($inner)
+    protected function isNotAutoEscapedTag($inner)
     {
         // 省略形は「最初の `=` が比較の一部でない」ことで判定する. `[^=]*+` は退避しないので長いタグでも線形
-        return (bool) preg_match('/^\s*(?:assign|append)\b|^\s*\$[^=]*+(?<![!<>=])=(?!=)|\s(?:nofilter\b|assign\s*=)/', $inner);
+        return (bool) preg_match('/^\s*[A-Za-z_]\w*(?=\s|$)|^\s*\$[^=]*+(?<![!<>=])=(?!=)|\s(?:nofilter\b|assign\s*=)/', $inner);
     }
 
     /**
@@ -887,12 +894,14 @@ class SC_Helper_SmartyEscape
      *
      * Smarty は自動エスケープを有効にすると html モードの `escape` を何もしない式にコンパイルする
      * (smarty-php/smarty#1188). 出力時に自動エスケープが掛かる場合はそれで良いが, nofilter を付けた出力や,
-     * 変数に代入してから nofilter / C3 等で出力する場合は, 値がエスケープされずに出力されてしまう.
-     * そのため nofilter になるタグと変数に代入するタグでは, 括弧の中や modifier の引数の中も含めて `escape:'force'` にする.
-     * 代入した変数を自動エスケープのまま出力すると二重エスケープになるが, 生出力になるよりは安全側である.
+     * 変数に代入したり {include} や関数の引数に渡したりしてから nofilter / C3 等で出力する場合は, 値がエスケープされずに
+     * 出力されてしまう. 条件式の中の比較 (`{if $v|escape == …}`) も結果が変わる.
+     * そのため自動エスケープが掛からないタグでは, 括弧の中, modifier の引数の中, ダブルクォート文字列の中の
+     * 埋め込み式 (`` "`$v|escape`" ``) も含めて `escape:'force'` にし, 従来と同じ値にする.
+     * 渡した先で自動エスケープのまま出力すると二重エスケープになるが (`|h` を渡した場合と同じ), 生出力になるよりは安全側である.
      *
-     * 引用符で囲まれた文字列は読み飛ばす. 第 1 引数がリテラルでない (`escape:$mode`) ものは, Smarty が実行時の
-     * escape 関数を呼ぶためそのままでエスケープされる. ダブルクォート文字列の中の埋め込み式 (`` "`$v|escape`" ``) は対象外.
+     * 文字列リテラルは読み飛ばす. 第 1 引数がリテラルでない (`escape:$mode`) ものは, Smarty が実行時の
+     * escape 関数を呼ぶためそのままでエスケープされる.
      *
      * @param string $code タグの中身
      *
@@ -900,28 +909,33 @@ class SC_Helper_SmartyEscape
      */
     protected function forceHtmlEscape($code)
     {
-        // `|escape` に一致し, 引数なし (後ろが modifier の区切り・空白・閉じ括弧・終端) か, 第 1 引数が html のリテラルの
-        // ときだけ一致する. 一致した `:html` は `:'force'` に置き換え, 2 つ目以降の引数 (文字コード等) はそのまま残す
-        static $pattern = '/\G(\|\s*@?escape)(?::(["\']?)html\2(?=[:|\s)\]]|$)|(?=[|\s)\]]|$))/i';
+        // `|escape` に一致し, 引数なしか, 第 1 引数が html のリテラルのときだけ一致する (escape_js や escape:$mode は一致しない).
+        // 一致した `:html` は `:'force'` に置き換え, 2 つ目以降の引数 (文字コード等) はそのまま残す
+        static $pattern = '/\G(\|\s*@?escape)(?::(["\']?)html\2(?!\w)|(?![\w:]))/i';
+        // 読んでいる場所: code = 式, ' / " = 文字列リテラル, ` = ダブルクォート文字列の中の埋め込み式
+        $arrState = ['code'];
         $out = '';
-        $quote = null;
         $len = strlen($code);
         for ($i = 0; $i < $len; $i++) {
             $c = $code[$i];
-            if ($quote !== null) {
-                // 引用符の中はそのまま写す
+            $state = end($arrState);
+            if ($state === '"' || $state === "'") {
                 if ($c === '\\' && $i + 1 < $len) {
                     $out .= $c.$code[++$i];
                     continue;
                 }
-                if ($c === $quote) {
-                    $quote = null;
+                if ($c === $state) {
+                    array_pop($arrState);
+                } elseif ($c === '`' && $state === '"') {
+                    $arrState[] = '`';
                 }
                 $out .= $c;
                 continue;
             }
             if ($c === '"' || $c === "'") {
-                $quote = $c;
+                $arrState[] = $c;
+            } elseif ($c === '`' && $state === '`') {
+                array_pop($arrState);
             } elseif ($c === '|' && preg_match($pattern, $code, $m, 0, $i)) {
                 $out .= $m[1].":'force'";
                 $i += strlen($m[0]) - 1;

@@ -15,24 +15,24 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
     {
         return [
             // C1
-            ['$v|h', '$v|h nofilter'],
-            ['$v|default:$f|h', '$v|default:$f|h nofilter'],
-            ['$v|h|nl2br', '$v|h|nl2br nofilter'],
-            ['$v|h|nl2br_html', '$v|h|nl2br_html nofilter'],
-            ['$v|h|nl2br_html|default:$f', '$v|h|nl2br_html|default:($f|h) nofilter'],
-            ['$v|wordwrap:20|h|nl2br', '$v|wordwrap:20|h|nl2br nofilter'],
-            ['$v|h|default:$f', '$v|h|default:($f|h) nofilter'],
-            ['$v|h|default:"a:b"', '$v|h|default:("a:b"|h) nofilter'],
-            ['$v|h|nl2br|default:$x.y', '$v|h|nl2br|default:($x.y|h) nofilter'],
-            ['$v|h nocache', '$v|h nocache nofilter'],
-            ["\$v|escape:'javascript'|h", "\$v|escape:'javascript'|h nofilter"],
+            ['$v|h', '$v|h|script_escape nofilter'],
+            ['$v|default:$f|h', '$v|default:$f|h|script_escape nofilter'],
+            ['$v|h|nl2br', '$v|h|nl2br|script_escape nofilter'],
+            ['$v|h|nl2br_html', '$v|h|nl2br_html|script_escape nofilter'],
+            ['$v|h|nl2br_html|default:$f', '$v|h|nl2br_html|default:($f|h)|script_escape nofilter'],
+            ['$v|wordwrap:20|h|nl2br', '$v|wordwrap:20|h|nl2br|script_escape nofilter'],
+            ['$v|h|default:$f', '$v|h|default:($f|h)|script_escape nofilter'],
+            ['$v|h|default:"a:b"', '$v|h|default:("a:b"|h)|script_escape nofilter'],
+            ['$v|h|nl2br|default:$x.y', '$v|h|nl2br|default:($x.y|h)|script_escape nofilter'],
+            ['$v|h nocache', '$v|h|script_escape nocache nofilter'],
+            ["\$v|escape:'javascript'|h", "\$v|escape:'javascript'|h|script_escape nofilter"],
             // h の後に未知の modifier が続くものは対象外 (自動エスケープを維持)
             ['$v|h|cat:"#x"', '$v|h|cat:"#x"'],
             ['$v|h|sfDispDBDate', '$v|h|sfDispDBDate'],
             // C10
-            ["\$v|wordwrap:75:'<br/>':true", '$v|wordwrap:75:"\\n":true|h|nl2br nofilter'],
-            ['$v|wordwrap:10:"<br />"', '$v|wordwrap:10:"\\n"|h|nl2br nofilter'],
-            ["\$v|wordwrap:10:'<BR>':false", '$v|wordwrap:10:"\\n":false|h|nl2br nofilter'],
+            ["\$v|wordwrap:75:'<br/>':true", '$v|wordwrap:75:"\\n":true|h|nl2br|script_escape nofilter'],
+            ['$v|wordwrap:10:"<br />"', '$v|wordwrap:10:"\\n"|h|nl2br|script_escape nofilter'],
+            ["\$v|wordwrap:10:'<BR>':false", '$v|wordwrap:10:"\\n":false|h|nl2br|script_escape nofilter'],
             // 区切りが <br> のリテラルでないもの, 幅・第 3 引数がリテラルでないものは対象外 (自動エスケープを維持)
             ["\$v|wordwrap:10:'<b>':true", "\$v|wordwrap:10:'<b>':true"],
             ["\$v|wordwrap:10:'<br onload=x>'", "\$v|wordwrap:10:'<br onload=x>'"],
@@ -44,33 +44,33 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             ['$v|nl2br', '$v|nl2br|script_escape nofilter'],
             ['$v|nl2br_html', '$v|nl2br_html|script_escape nofilter'],
             // C4
-            ['$arrErr.name', '$arrErr.name|h_allow_br nofilter'],
-            ['$arrErr[$key]', '$arrErr[$key]|h_allow_br nofilter'],
+            ['$arrErr.name', '$arrErr.name|h_allow_br|script_escape nofilter'],
+            ['$arrErr[$key]', '$arrErr[$key]|h_allow_br|script_escape nofilter'],
             ['$arrErr[$key]|sfGetErrorColor', '$arrErr[$key]|sfGetErrorColor'],
             // C4 (エラーメッセージ系の変数名)
-            ['$err', '$err|h_allow_br nofilter'],
-            ['$errBirth', '$errBirth|h_allow_br nofilter'],
-            ['$plg_pg_mulpay_msg', '$plg_pg_mulpay_msg|h_allow_br nofilter'],
-            ['$tpl_exam_error', '$tpl_exam_error|h_allow_br nofilter'],
-            ['$tpl_message', '$tpl_message|h_allow_br nofilter'],
+            ['$err', '$err|h_allow_br|script_escape nofilter'],
+            ['$errBirth', '$errBirth|h_allow_br|script_escape nofilter'],
+            ['$plg_pg_mulpay_msg', '$plg_pg_mulpay_msg|h_allow_br|script_escape nofilter'],
+            ['$tpl_exam_error', '$tpl_exam_error|h_allow_br|script_escape nofilter'],
+            ['$tpl_message', '$tpl_message|h_allow_br|script_escape nofilter'],
             ['$item.err_msg', '$item.err_msg'],
-            ['$err|h', '$err|h nofilter'],
+            ['$err|h', '$err|h|script_escape nofilter'],
             ['$err|nl2br', '$err|nl2br|script_escape nofilter'],
             ['$err ? $a : $b', '$err ? $a : $b'],
             // C6 は名前による C4 より優先
             ['$tpl_error', '$tpl_error|script_escape nofilter'],
             ['$GLOBAL_ERR', '$GLOBAL_ERR|script_escape nofilter'],
             // C5
-            ['$v|sfGetChecked:1', '$v|sfGetChecked:1 nofilter'],
-            ['$v|sfGetEnabled', '$v|sfGetEnabled nofilter'],
-            ['$v|sfViewPriceTax2', '$v|sfViewPriceTax2 nofilter'],
-            ['$v|default:0|sfViewPriceTax3:1', '$v|default:0|sfViewPriceTax3:1 nofilter'],
-            ['$v|dispCurrency', '$v|dispCurrency nofilter'],
+            ['$v|sfGetChecked:1', '$v|sfGetChecked:1|script_escape nofilter'],
+            ['$v|sfGetEnabled', '$v|sfGetEnabled|script_escape nofilter'],
+            ['$v|sfViewPriceTax2', '$v|sfViewPriceTax2|script_escape nofilter'],
+            ['$v|default:0|sfViewPriceTax3:1', '$v|default:0|sfViewPriceTax3:1|script_escape nofilter'],
+            ['$v|dispCurrency', '$v|dispCurrency|script_escape nofilter'],
             ['$v|h|dispCurrency', '$v|h|dispCurrency'],
             // C6
             ['$tpl_onload', '$tpl_onload|script_escape nofilter'],
             ['$redirect_html', '$redirect_html|script_escape nofilter'],
-            ['$redirect_html|h', '$redirect_html|h nofilter'],
+            ['$redirect_html|h', '$redirect_html|h|script_escape nofilter'],
             ['$tpl_payment_onload', '$tpl_payment_onload|script_escape nofilter'],
             ['$paygent_token_js_url', '$paygent_token_js_url|script_escape nofilter'],
             ['$tpl_onload_x', '$tpl_onload_x'],
@@ -90,7 +90,7 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             ['$json_paidy|default:"a`$x`"', '$json_paidy|default:"a`$x`"'],
             ['$json_paidy|default:$smarty.get.x', '$json_paidy|default:$smarty.get.x'],
             // C7
-            ["\$m|escape:'hexentity'", "\$m|escape:'hexentity' nofilter"],
+            ["\$m|escape:'hexentity'", "\$m|escape:'hexentity'|script_escape nofilter"],
             ["\$m|escape:'javascript'", "\$m|escape:'javascript'|script_escape nofilter"],
             ['$m|escape:"hex"', '$m|escape:"hex"'],
             ['$m|escape', '$m|escape'],
@@ -98,7 +98,7 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             ['$v|escape|nl2br', "\$v|escape:'force'|nl2br|script_escape nofilter"],
             ['$v|escape:"html"|nl2br', "\$v|escape:'force'|nl2br|script_escape nofilter"],
             ['$v|escape:"html":"UTF-8"|nl2br_html', "\$v|escape:'force':\"UTF-8\"|nl2br_html|script_escape nofilter"],
-            ['$v|escape|sfViewPriceTax', "\$v|escape:'force'|sfViewPriceTax nofilter"],
+            ['$v|escape|sfViewPriceTax', "\$v|escape:'force'|sfViewPriceTax|script_escape nofilter"],
             ['$v|escape|escape:"javascript"', "\$v|escape:'force'|escape:\"javascript\"|script_escape nofilter"],
             ['$v|escape|nl2br nofilter', "\$v|escape:'force'|nl2br nofilter"],
             ['$v|escape nofilter', "\$v|escape:'force' nofilter"],
@@ -122,8 +122,8 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             ['$w != $v|escape', '$w != $v|escape'],
             ['$w === $v|escape', '$w === $v|escape'],
             // C7 (html モードは double_encode=false を明示したものだけ nofilter にし, C9 で force にする)
-            ['$v|escape:"html":"UTF-8":false', "\$v|escape:'force':\"UTF-8\":false nofilter"],
-            ["\$v|escape:'html':null:0", "\$v|escape:'force':null:0 nofilter"],
+            ['$v|escape:"html":"UTF-8":false', "\$v|escape:'force':\"UTF-8\":false|script_escape nofilter"],
+            ["\$v|escape:'html':null:0", "\$v|escape:'force':null:0|script_escape nofilter"],
             ['$v|escape:"html":"UTF-8":true', '$v|escape:"html":"UTF-8":true'],
             ['$v|escape:"html":"UTF-8":$flag', '$v|escape:"html":"UTF-8":$flag'],
             // C9 (括弧の中・modifier の引数の中も対象)
@@ -134,8 +134,19 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             ['$v|cat:"|escape"|nl2br', '$v|cat:"|escape"|nl2br|script_escape nofilter'],
             ['$v|escape_js nofilter', '$v|escape_js nofilter'],
             ['$v|escape:$mode|nl2br', '$v|escape:$mode|nl2br|script_escape nofilter'],
-            ['if $v|escape == "a"', 'if $v|escape == "a"'],
-            ['include file="a.tpl" x=$v|escape', 'include file="a.tpl" x=$v|escape'],
+            ['count($v|escape)', 'count($v|escape)'],
+            ['"`$v|escape`"', '"`$v|escape`"'],
+            // C9 (条件式・{include} や関数の引数など, 自動エスケープが掛からないタグも対象)
+            ['if $v|escape == "a"', "if \$v|escape:'force' == \"a\""],
+            ['include file="a.tpl" x=$v|escape', "include file=\"a.tpl\" x=\$v|escape:'force'"],
+            ['html_options options=$arr selected=$v|escape:"html"', "html_options options=\$arr selected=\$v|escape:'force'"],
+            ['foreach from=[$v|escape,$w|escape] item=x', "foreach from=[\$v|escape:'force',\$w|escape:'force'] item=x"],
+            ['include file="a.tpl" x=$v|escape:"url" y=$v|escape:$mode', 'include file="a.tpl" x=$v|escape:"url" y=$v|escape:$mode'],
+            // C9 (ダブルクォート文字列の中の埋め込み式も対象. 文字列そのものとシングルクォート文字列は書き換えない)
+            ['assign var=x value="`$v|escape`"', "assign var=x value=\"`\$v|escape:'force'`\""],
+            ['assign var=x value="a|escape `$v|escape:"html"` b|escape `$w|escape`"', "assign var=x value=\"a|escape `\$v|escape:'force'` b|escape `\$w|escape:'force'`\""],
+            ["assign var=x value='`\$v|escape`'", "assign var=x value='`\$v|escape`'"],
+            ['"`$v|escape`"|nl2br', "\"`\$v|escape:'force'`\"|nl2br|script_escape nofilter"],
             // 変換しないもの
             ['$v', '$v'],
             ['$v|h nofilter', '$v|h nofilter'],
@@ -157,10 +168,10 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             ['$arrErr.x . $y', '$arrErr.x . $y'],
             ['$tpl_onload . $x', '$tpl_onload . $x'],
             // 括弧・添字・プロパティ参照の中は対象
-            ['($a ? $b : $c)|h', '($a ? $b : $c)|h nofilter'],
-            ['$arr[$i+1]|h', '$arr[$i+1]|h nofilter'],
-            ['$o->p|h', '$o->p|h nofilter'],
-            ['$v|default:($a ? 1 : 2)|h', '$v|default:($a ? 1 : 2)|h nofilter'],
+            ['($a ? $b : $c)|h', '($a ? $b : $c)|h|script_escape nofilter'],
+            ['$arr[$i+1]|h', '$arr[$i+1]|h|script_escape nofilter'],
+            ['$o->p|h', '$o->p|h|script_escape nofilter'],
+            ['$v|default:($a ? 1 : 2)|h', '$v|default:($a ? 1 : 2)|h|script_escape nofilter'],
         ];
     }
 
@@ -175,7 +186,7 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
     public function testTransformSkipsCommentAndLiteral()
     {
         $source = "<!--{* <!--{\$v|h}--> *}-->\n<!--{literal}--><!--{\$v|h}--><!--{/literal}-->\n<!--{\$v|h}-->";
-        $expected = "<!--{* <!--{\$v|h}--> *}-->\n<!--{literal}--><!--{\$v|h}--><!--{/literal}-->\n<!--{\$v|h nofilter}-->";
+        $expected = "<!--{* <!--{\$v|h}--> *}-->\n<!--{literal}--><!--{\$v|h}--><!--{/literal}-->\n<!--{\$v|h|script_escape nofilter}-->";
         $this->assertSame($expected, $this->objHelper->transform($source));
     }
 
@@ -190,7 +201,7 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
     public function testTransformKeepsDelimiterInString()
     {
         $source = '<!--{$v|default:"}-->"|h}-->';
-        $this->assertSame('<!--{$v|default:"}-->"|h nofilter}-->', $this->objHelper->transform($source));
+        $this->assertSame('<!--{$v|default:"}-->"|h|script_escape nofilter}-->', $this->objHelper->transform($source));
     }
 
     public function scriptProvider()
@@ -211,7 +222,7 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             'C6 の JSON 変数を優先' => ['<script>var a = <!--{$json_paidy|default:"no_data"}-->;</script>', '<script>var a = <!--{$json_paidy|default:"no_data"|script_escape nofilter}-->;</script>'],
             'C6 の default の代替値が変数なら C8' => ['<script>var a = <!--{$json_paidy|default:$x}-->;</script>', "<script>var a = <!--{\$json_paidy|default:\$x{$js}}-->;</script>"],
             'C6 の名前でも添字付きは C8' => ['<script><!--{$arrDeliv[cnt].deliv_id}--></script>', '<script><!--{$arrDeliv[cnt].deliv_id|escape_js|script_escape nofilter}--></script>'],
-            'C1 を優先' => ["<script>a='<!--{\$v|h}-->';</script>", "<script>a='<!--{\$v|h nofilter}-->';</script>"],
+            'C1 を優先' => ["<script>a='<!--{\$v|h}-->';</script>", "<script>a='<!--{\$v|h|script_escape nofilter}-->';</script>"],
             'エラー系の名前より優先' => ["<script>a='<!--{\$err_msg}-->';</script>", "<script>a='<!--{\$err_msg{$js}}-->';</script>"],
             '他の modifier は対象外' => ["<script>a='<!--{\$v|upper}-->';</script>", "<script>a='<!--{\$v|upper}-->';</script>"],
             '演算子を含む式は対象外' => ['<script>a=<!--{$v+1}-->;</script>', '<script>a=<!--{$v+1}-->;</script>'],
@@ -269,9 +280,19 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             'escape を代入して自動エスケープで出力' => ['<!--{$v|escape assign=x}--><!--{$x}-->', ['v' => '<i>'], '&amp;lt;i&amp;gt;'],
             '省略形の代入の escape' => ['<!--{$x = $v|escape}--><!--{$x|nl2br}-->', ['v' => $v], $esc."<br />\n2"],
             'append の escape' => ['<!--{append var=x value=$v|escape}--><!--{$x[0] nofilter}-->', ['v' => $v], $esc."\n2"],
+            '埋め込み式の escape' => ['<!--{assign var=x value="`$v|escape`"}--><!--{$x|nl2br}-->', ['v' => $v], $esc."<br />\n2"],
+            'include の引数の escape' => ['<!--{include file=$child x=$v|escape}-->', ['v' => $v, 'child' => 'string:<!--{$x|nl2br}-->'], $esc."<br />\n2"],
+            '配列リテラルの中の escape' => ['<!--{foreach from=[$v|escape] item=x}--><!--{$x nofilter}--><!--{/foreach}-->', ['v' => $v], $esc."\n2"],
+            '条件式の escape' => ['<!--{if $v|escape == "&lt;i&gt;"}-->EQ<!--{else}-->NE<!--{/if}-->', ['v' => '<i>'], 'EQ'],
             'double_encode=false を維持' => ['<!--{$v|escape:"html":"UTF-8":false}-->', ['v' => 'A&amp;B <i>'], 'A&amp;B &lt;i&gt;'],
             '括弧の中の escape|nl2br' => ['<!--{($v|escape)|nl2br}-->', ['v' => $v], $esc."<br />\n2"],
             'modifier の引数の中の escape' => ['<!--{$v|cat:($w|escape)|nl2br}-->', ['v' => "<i>\n", 'w' => '<u>'], "<i><br />\n&lt;u&gt;"],
+            // 従来の script_escape は自動エスケープと併用する (HTML エスケープでは防げない出力の保護を維持する)
+            'javascript: の URL' => ['<a href="<!--{$v}-->">', ['v' => 'javascript:alert(1)'], '<a href="#script escaped#alert(1)">'],
+            'h 付きの javascript: の URL' => ['<a href="<!--{$v|h}-->">', ['v' => 'JavaScript:alert(1)'], '<a href="#script escaped#alert(1)">'],
+            '代入した javascript: の URL' => ['<!--{assign var=x value=$v}--><a href="<!--{$x}-->">', ['v' => 'javascript:alert(1)'], '<a href="#script escaped#alert(1)">'],
+            'escape:quotes (Smarty が自動エスケープしないモード)' => ['<!--{$v|escape:"quotes"}-->', ['v' => "<script>alert('x')</script>"], "#script escaped#alert(\\'x\\')#script escaped#"],
+            'エラーメッセージの script_escape' => ['<!--{$arrErr.x}-->', ['arrErr' => ['x' => 'A<br />javascript:<i>']], 'A<br />#script escaped#&lt;i&gt;'],
             'hexentity' => ["<!--{\$v|escape:'hexentity'}-->", ['v' => 'a@'], '&#x61;&#x40;'],
             '条件式の h の後の出力' => ['<!--{if $v|h != ""}--><!--{/if}--><!--{$v}-->', ['v' => '<i>'], '&lt;i&gt;'],
             '代入の h の後の出力' => ['<!--{assign var=w value=$v|h}--><!--{$v}-->', ['v' => '<i>'], '&lt;i&gt;'],

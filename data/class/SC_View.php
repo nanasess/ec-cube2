@@ -123,8 +123,8 @@ class SC_View
         }
         $this->autoEscape = true;
         $this->_smarty->setEscapeHtml(true);
-        // 通常の出力は htmlspecialchars で保護する. 互換変換で従来どおりにする出力は script_escape を明示する.
-        $this->_smarty->default_modifiers = [];
+        // 既定の modifier (script_escape) は残し, 自動エスケープと併用する (javascript: の URL 等は HTML エスケープでは防げない).
+        // 互換変換で nofilter を補う出力は既定の modifier も外れるため, 互換変換が script_escape を明示する.
         $objCompat = new SC_Helper_SmartyEscape_Ex($this->_smarty->getLeftDelimiter(), $this->_smarty->getRightDelimiter());
         $this->_smarty->registerFilter('pre', [$objCompat, 'prefilter']);
         // 互換規則の変更でコンパイル済みテンプレートを分ける

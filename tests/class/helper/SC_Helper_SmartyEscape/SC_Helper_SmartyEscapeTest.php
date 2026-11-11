@@ -112,6 +112,20 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             ['$v|escape:"url" assign=w', '$v|escape:"url" assign=w'],
             ['assign var=w value=$v|escape', "assign var=w value=\$v|escape:'force'"],
             ['assign var=w value=$v|escape:"javascript"', 'assign var=w value=$v|escape:"javascript"'],
+            ['append var=w value=$v|escape', "append var=w value=\$v|escape:'force'"],
+            // C9 (省略形の代入. 比較は代入ではない)
+            ['$w = $v|escape', "\$w = \$v|escape:'force'"],
+            ['$w=$v|escape', "\$w=\$v|escape:'force'"],
+            ['$arr.k = $v|escape', "\$arr.k = \$v|escape:'force'"],
+            ['$arr[$i] = $v|escape', "\$arr[\$i] = \$v|escape:'force'"],
+            ['$w == $v|escape', '$w == $v|escape'],
+            ['$w != $v|escape', '$w != $v|escape'],
+            ['$w === $v|escape', '$w === $v|escape'],
+            // C7 (html モードは double_encode=false を明示したものだけ nofilter にし, C9 で force にする)
+            ['$v|escape:"html":"UTF-8":false', "\$v|escape:'force':\"UTF-8\":false nofilter"],
+            ["\$v|escape:'html':null:0", "\$v|escape:'force':null:0 nofilter"],
+            ['$v|escape:"html":"UTF-8":true', '$v|escape:"html":"UTF-8":true'],
+            ['$v|escape:"html":"UTF-8":$flag', '$v|escape:"html":"UTF-8":$flag'],
             // C9 (括弧の中・modifier の引数の中も対象)
             ['($v|escape)|nl2br', "(\$v|escape:'force')|nl2br|script_escape nofilter"],
             ['$v|cat:($w|escape)|nl2br', "\$v|cat:(\$w|escape:'force')|nl2br|script_escape nofilter"],
@@ -253,6 +267,9 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
             'escape を assign で代入して nl2br で出力' => ['<!--{assign var=x value=$v|escape}--><!--{$x|nl2br}-->', ['v' => $v], $esc."<br />\n2"],
             // 代入した変数を自動エスケープのまま出力すると二重エスケープになる (生出力になるよりは安全側)
             'escape を代入して自動エスケープで出力' => ['<!--{$v|escape assign=x}--><!--{$x}-->', ['v' => '<i>'], '&amp;lt;i&amp;gt;'],
+            '省略形の代入の escape' => ['<!--{$x = $v|escape}--><!--{$x|nl2br}-->', ['v' => $v], $esc."<br />\n2"],
+            'append の escape' => ['<!--{append var=x value=$v|escape}--><!--{$x[0] nofilter}-->', ['v' => $v], $esc."\n2"],
+            'double_encode=false を維持' => ['<!--{$v|escape:"html":"UTF-8":false}-->', ['v' => 'A&amp;B <i>'], 'A&amp;B &lt;i&gt;'],
             '括弧の中の escape|nl2br' => ['<!--{($v|escape)|nl2br}-->', ['v' => $v], $esc."<br />\n2"],
             'modifier の引数の中の escape' => ['<!--{$v|cat:($w|escape)|nl2br}-->', ['v' => "<i>\n", 'w' => '<u>'], "<i><br />\n&lt;u&gt;"],
             'hexentity' => ["<!--{\$v|escape:'hexentity'}-->", ['v' => 'a@'], '&#x61;&#x40;'],

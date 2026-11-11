@@ -40,7 +40,8 @@
  *   C4  `$arrErr…` と, エラーメッセージ系の名前の変数         → |h_allow_br nofilter (エスケープして <br> だけ戻す)
  *   C5  固定の属性文字列や HTML を返す modifier で終わる出力   → nofilter
  *   C6  HTML/JS 断片や JSON を入れる慣習の変数                → |script_escape nofilter (従来どおり)
- *   C7  自動エスケープと重ねると壊れる `escape` のモード       → nofilter (javascript は |script_escape nofilter)
+ *   C7  自動エスケープと重ねると壊れる `escape` のモード       → nofilter (javascript は |script_escape nofilter.
+ *       html モードは double_encode=false を明示したものだけ)
  *   C8  script 要素の中の modifier なしの出力                 → |escape_js|script_escape nofilter (JS の文字列用にエスケープ)
  *   C9  nofilter になる出力と変数に代入する式の html モードの `escape` → escape:'force' (Smarty が何もしない式にするため)
  *   C10 `wordwrap` の区切りに `<br>` を指定した出力            → |wordwrap:幅:"\n"|h|nl2br nofilter
@@ -54,7 +55,7 @@ class SC_Helper_SmartyEscape
     // ------------------------------------------------------------------
 
     /** 互換規則のバージョン. 規則を変えたら上げる (compile_id に反映される). */
-    public const VERSION = '13';
+    public const VERSION = '14';
 
     /** C4 で使う modifier 名 */
     public const MODIFIER_ERROR = 'h_allow_br';
@@ -472,6 +473,10 @@ class SC_Helper_SmartyEscape
      * C7: `escape:'hexentity'` 等, 自動エスケープと重ねると壊れる `escape` のモードで終わる出力を従来どおりとする.
      * モードごとの扱いは $arrRawEscapeModes を参照.
      *
+     * html モードは Smarty が自動エスケープ時に何もしない式にするため, 通常は自動エスケープに任せる (C9 の対象にもしない).
+     * ただし double_encode に false を明示した出力 (`escape:'html':'UTF-8':false`) は, 自動エスケープ (double_encode=true)
+     * では元からある実体参照が二重になるため, 引数を保ったまま nofilter を補う (C9 で `escape:'force':'UTF-8':false` になる).
+     *
      * @return array{0: string, 1: string}|null
      */
     protected function ruleC7EscapeMode(array $tag)
@@ -479,7 +484,11 @@ class SC_Helper_SmartyEscape
         if ($tag['last'] !== 'escape') {
             return null;
         }
-        $mode = $this->escapeMode($this->segment($tag, count($tag['modifiers']) - 1));
+        $segment = $this->segment($tag, count($tag['modifiers']) - 1);
+        $mode = $this->escapeMode($segment);
+        if ($mode === 'html') {
+            return $this->hasDoubleEncodeFalse($segment) ? [$tag['expr'], ''] : null;
+        }
         if ($mode === null || !isset(static::$arrRawEscapeModes[$mode])) {
             return null;
         }
@@ -794,6 +803,20 @@ class SC_Helper_SmartyEscape
     }
 
     /**
+     * `escape` modifier の第 3 引数 (double_encode) に false / 0 のリテラルが指定されているか (C7).
+     *
+     * @param string $segment modifier の文字列
+     *
+     * @return bool
+     */
+    protected function hasDoubleEncodeFalse($segment)
+    {
+        $args = $this->splitArguments($segment);
+
+        return isset($args[3]) && preg_match('/^(?:false|0)$/i', trim($args[3])) === 1;
+    }
+
+    /**
      * `|name:arg1:arg2` を ['|name', 'arg1', 'arg2'] に分ける (引用符・括弧の中の `:` は区切らない).
      *
      * @param string $segment modifier の文字列
@@ -841,8 +864,13 @@ class SC_Helper_SmartyEscape
     // ------------------------------------------------------------------
 
     /**
-     * 変数に代入するタグ ({assign …} / assign=…) か, nofilter を書いたタグか.
+     * 変数に代入するタグか, nofilter を書いたタグか (C9 の対象).
      * 出力タグとして分解できないタグ (最上位に演算子がある式など) に C9 を掛けるかの判定に使う.
+     *
+     * 代入は次の 3 つの形を見る.
+     *   - 関数タグ {assign var=… value=…} / {append var=… value=…}
+     *   - 省略形 {$x = …} / {$x.k = …} / {$x[$i] = …} (比較の `==` `!=` `<=` `>=` `===` は代入ではない)
+     *   - 出力タグの assign= 属性
      *
      * @param string $inner 区切り記号を除いたタグの中身
      *
@@ -850,7 +878,8 @@ class SC_Helper_SmartyEscape
      */
     protected function isAssignOrNofilterTag($inner)
     {
-        return (bool) preg_match('/^\s*assign\b|\s(?:nofilter\b|assign\s*=)/', $inner);
+        // 省略形は「最初の `=` が比較の一部でない」ことで判定する. `[^=]*+` は退避しないので長いタグでも線形
+        return (bool) preg_match('/^\s*(?:assign|append)\b|^\s*\$[^=]*+(?<![!<>=])=(?!=)|\s(?:nofilter\b|assign\s*=)/', $inner);
     }
 
     /**

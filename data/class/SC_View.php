@@ -89,8 +89,8 @@ class SC_View
         $this->_smarty->registerPlugin('function', 'printXMLDeclaration', ['GC_Utils_Ex', 'printXMLDeclaration']);
         $this->_smarty->registerPlugin('modifier', 'format_name', 'smarty_modifier_format_name');
         // エラーメッセージ用: HTML エスケープした後に <br> だけを戻す
-        $this->_smarty->registerPlugin('modifier', SC_Helper_SmartyEscape::MODIFIER_ERROR, ['SC_Helper_SmartyEscape', 'escapeAllowBr']);
-        $this->_smarty->registerPlugin('modifier', SC_Helper_SmartyEscape::MODIFIER_SCRIPT, ['SC_Helper_SmartyEscape', 'escapeJs']);
+        $this->_smarty->registerPlugin('modifier', SC_Helper_SmartyEscape_Ex::MODIFIER_ERROR, ['SC_Helper_SmartyEscape_Ex', 'escapeAllowBr']);
+        $this->_smarty->registerPlugin('modifier', SC_Helper_SmartyEscape_Ex::MODIFIER_SCRIPT, ['SC_Helper_SmartyEscape_Ex', 'escapeJs']);
         $this->_smarty->muteUndefinedOrNullWarnings();
         $this->_smarty->default_modifiers = ['script_escape'];
 
@@ -110,6 +110,8 @@ class SC_View
      *
      * 画面出力 (SC_Display が使う View) から呼ばれる. メール本文の生成など, View を直接生成した場合は従来どおり.
      * 既存テンプレートとの互換変換 (SC_Helper_SmartyEscape) を, 他の prefilter の後に登録する.
+     * 互換変換は SC_Helper_SmartyEscape_Ex 経由で参照するため, class_extends やプラグインの loadClassFileChange で
+     * 規則や許可リストを差し替えられる (規則を変えたら VERSION も変えて, コンパイル済みテンプレートを分ける).
      * 最初の fetch / display より前に呼ぶこと.
      *
      * @return void
@@ -123,10 +125,10 @@ class SC_View
         $this->_smarty->setEscapeHtml(true);
         // 通常の出力は htmlspecialchars で保護する. 互換変換で従来どおりにする出力は script_escape を明示する.
         $this->_smarty->default_modifiers = [];
-        $objCompat = new SC_Helper_SmartyEscape($this->_smarty->getLeftDelimiter(), $this->_smarty->getRightDelimiter());
+        $objCompat = new SC_Helper_SmartyEscape_Ex($this->_smarty->getLeftDelimiter(), $this->_smarty->getRightDelimiter());
         $this->_smarty->registerFilter('pre', [$objCompat, 'prefilter']);
         // 互換規則の変更でコンパイル済みテンプレートを分ける
-        $this->_smarty->setCompileId(trim($this->_smarty->compile_id.'_ae'.SC_Helper_SmartyEscape::VERSION, '_'));
+        $this->_smarty->setCompileId(trim($this->_smarty->compile_id.'_ae'.SC_Helper_SmartyEscape_Ex::VERSION, '_'));
     }
 
     /**

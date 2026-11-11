@@ -298,4 +298,27 @@ class SC_Helper_SmartyEscapeTest extends Common_TestCase
         $objDisplay->setView($objView);
         $this->assertTrue($objView->isAutoEscape());
     }
+
+    /**
+     * class_extends やプラグイン (loadClassFileChange) が SC_Helper_SmartyEscape_Ex を差し替えると,
+     * 規則・許可リスト・VERSION (compile_id) に反映される.
+     *
+     * @runInSeparateProcess
+     *
+     * @preserveGlobalState disabled
+     */
+    public function testHelperIsOverridableByExClass()
+    {
+        // 別プロセスで, 自動ロードされる前に差し替え用の _Ex を読み込む (class_extends に置いた場合と同じ状態)
+        require_once __DIR__.'/fixtures/SC_Helper_SmartyEscape_Ex.php';
+        $objView = new SC_SiteView_Ex();
+        $objView->enableAutoEscape();
+        $objView->_smarty->setCompileDir(sys_get_temp_dir().'/sc_helper_smarty_escape_test');
+        $objView->assign('plg_raw_html', '<i>');
+        $objView->assign('tpl_onload', '<i>');
+
+        $this->assertStringEndsWith('aetest', $objView->_smarty->compile_id);
+        // 差し替えた許可リストが使われる (tpl_onload は許可リストから外れたので自動エスケープされる)
+        $this->assertSame('<i>&lt;i&gt;', $objView->_smarty->fetch('string:<!--{$plg_raw_html}--><!--{$tpl_onload}-->'));
+    }
 }

@@ -22,39 +22,37 @@
  */
 
 /**
- * Smarty の自動エスケープ (escape_html) を有効にしたときの、既存テンプレートとの互換変換.
+ * Smarty の自動エスケープ (escape_html) を有効にしたときの, 既存テンプレートとの互換変換.
  *
  * prefilter としてコンパイル対象のソースだけを変換する. 保存済みのテンプレートは書き換えない.
- * 変換するのは出力タグ (変数・式を直接出力するタグ) だけで, 条件式・代入・関数引数は変更しない.
+ * 変換するのは出力タグ (変数・式を直接出力するタグ) だけで, 条件式・代入・関数の引数は変更しない.
  *
- * - C1: `h` を含む既知の modifier 列に nofilter を補う. `h` の後の `default` の代替値は `h` で保護する.
- * - C3: `h` を伴わない `nl2br` / `nl2br_html` で終わる出力は従来どおり (`|script_escape nofilter`) とする.
- *       決済モジュールが決済情報 (arrOther) に入れるリンク等の HTML, 商品説明の HTML を保持するため.
- *       決済情報の項目名 (`$item.name`) も決済モジュールが HTML を入れるため, 本体の完了画面のテンプレートで
- *       `|script_escape nofilter` を明示している.
- * - C4: modifier なしの `$arrErr…` と, エラーメッセージ系の名前 (err / msg / mess を含む) の変数は,
- *       エスケープ後に `<br>` だけを戻す modifier を通す. C6 の変数は C6 を, script 要素の中のエラーメッセージ系の名前は C8 を優先する.
- * - C5: 固定の属性文字列や HTML を返す modifier (sfGetChecked 等) で終わる出力に nofilter を補う.
- * - C6: HTML/JS 断片や JSON を入れる慣習の変数 (本体と既存の拡張で使われているもの) を, 添字・プロパティなしで
- *       modifier なし (`default` のみを含む) で出力する場合は従来どおり (`|script_escape nofilter`) とする.
- * - C7: `escape:'hexentity'` 等, 自動エスケープと重ねると壊れる `escape` のモードで終わる出力を従来どおりとする.
- * - C8: JavaScript の script 要素の中にある, modifier なし (`default` のみを含む) の出力は,
- *       HTML ではなく JavaScript の文字列用にエスケープする (`|escape_js|script_escape nofilter`).
- *       script 要素の開始・終了は同じテンプレートのソースの中で判定する. 判定できない場合は通常の自動エスケープになる.
- *       `<` `>` `&` 引用符等も `\x3c` 形式にするため, 判定を誤って HTML の中に出力しても HTML として解釈されない.
- *       JavaScript で値を HTML として DOM に入れる箇所 (`.html()` / `innerHTML` 等) は HTML としてのエスケープにならないため,
- *       テンプレートで `|h` を付ける (C1 により `|h nofilter` になる).
- * - C9: C1〜C8 で nofilter を補う出力タグと, テンプレートに nofilter が書かれた出力タグの html モードの `escape`
- *       (引数なし / 'html') を `escape:'force'` にする. Smarty は自動エスケープを有効にすると html モードの `escape` を
- *       何もしない式にするため, そのままでは `|escape|nl2br` 等がエスケープされずに出力される.
- * - C10: `wordwrap` の区切りに `<br>` のリテラルを指定した出力 (`|wordwrap:幅:'<br />'[:真偽]` だけのもの) は,
- *       改行で折り返してから `h` でエスケープし, `nl2br` で改行を `<br />` にする (`|wordwrap:幅:"\n"[:真偽]|h|nl2br nofilter`).
- *       区切りの `<br>` を保ったまま, 値はエスケープされる. 値に元からある改行も `<br />` になる.
+ * 処理の流れ:
+ *   transform()    テンプレートのソースを走査し, タグごとに transformTag() を呼ぶ.
+ *                  Smarty コメントと {literal} の中は変更しない. script 要素の中にいるかを追跡する (C8 のため).
+ *   transformTag() タグを parse() で分解し, 規則を上から順に試す. 最初に当たった規則で nofilter を補う.
+ *                  どの規則にも当たらない出力タグは変更せず, Smarty の自動エスケープに任せる.
  *
- * C2 (画面出力の View だけを自動エスケープ対象にする) は SC_Display / SC_View 側で扱う.
+ * 規則 (番号は PR の説明と共通. 詳細は各 rule メソッドのコメント):
+ *   C1  `h` を含む既知の modifier 列                         → nofilter を補う (二重エスケープを避ける)
+ *   C2  画面出力の View だけを自動エスケープの対象にする      → SC_Display / SC_View 側で扱う
+ *   C3  `nl2br` / `nl2br_html` で終わる出力                   → |script_escape nofilter (従来どおり)
+ *   C4  `$arrErr…` と, エラーメッセージ系の名前の変数         → |h_allow_br nofilter (エスケープして <br> だけ戻す)
+ *   C5  固定の属性文字列や HTML を返す modifier で終わる出力   → nofilter
+ *   C6  HTML/JS 断片や JSON を入れる慣習の変数                → |script_escape nofilter (従来どおり)
+ *   C7  自動エスケープと重ねると壊れる `escape` のモード       → nofilter (javascript は |script_escape nofilter)
+ *   C8  script 要素の中の modifier なしの出力                 → |escape_js|script_escape nofilter (JS の文字列用にエスケープ)
+ *   C9  nofilter になる出力タグの html モードの `escape`      → escape:'force' (Smarty が何もしない式にするため)
+ *   C10 `wordwrap` の区切りに `<br>` を指定した出力            → |wordwrap:幅:"\n"|h|nl2br nofilter
+ *
+ * `h` を含む出力は C1 だけで判定する. それ以外は $arrRules の順に試し, 最初に当たった規則だけを使う.
  */
 class SC_Helper_SmartyEscape
 {
+    // ------------------------------------------------------------------
+    // 設定
+    // ------------------------------------------------------------------
+
     /** 互換規則のバージョン. 規則を変えたら上げる (compile_id に反映される). */
     public const VERSION = '12';
 
@@ -63,6 +61,21 @@ class SC_Helper_SmartyEscape
 
     /** C8 で使う modifier 名 */
     public const MODIFIER_SCRIPT = 'escape_js';
+
+    /**
+     * 規則を試す順. 先に当たった規則だけを使う (C1 は `h` を含む出力だけに使うため含めない).
+     * 各メソッドは [書き換えた式, 補う modifier] を返す. 対象外なら null.
+     */
+    protected static $arrRules = [
+        'ruleC10WordwrapBr',
+        'ruleC3Nl2br',
+        'ruleC5FixedOutput',
+        'ruleC7EscapeMode',
+        'ruleC4ArrErr',
+        'ruleC6RawVariable',
+        'ruleC8InScript',
+        'ruleC4ErrorName',
+    ];
 
     /**
      * `h` の後に続いてよい modifier 列 (C1).
@@ -94,19 +107,19 @@ class SC_Helper_SmartyEscape
     ];
 
     /**
-     * `escape` で終わる出力のモード別の扱い (C7).
-     * html は Smarty が自動エスケープを省略するため対象外. hex は出力が `%xx` のみで自動エスケープの影響がない.
+     * `escape` で終わる出力を従来どおりにするモードと, そのときに補う modifier (C7).
+     * html は Smarty が自動エスケープを省略するため対象外 (C9 で扱う). hex は出力が `%xx` のみで自動エスケープの影響がない.
      * hexentity / decentity は出力が実体参照なので二重エスケープを避ける.
      * javascript は出力先 (script 要素か属性か) をコンパイル時に判別できないため従来どおりとする.
      */
-    public static $arrEscapeModeSuffix = [
-        'hexentity' => ' nofilter',
-        'decentity' => ' nofilter',
-        'javascript' => '|script_escape nofilter',
+    public static $arrRawEscapeModes = [
+        'hexentity' => '',
+        'decentity' => '',
+        'javascript' => '|script_escape',
     ];
 
     /**
-     * C4 の対象にするエラーメッセージ系の変数名 (最上位の変数名に対して判定する).
+     * C4 の対象にするエラーメッセージ系の変数名 (式の先頭の変数名に対して判定する).
      * `<br>` 以外はエスケープするため, 名前の判定が外れても `<br>` 以外のタグが文字列で表示されるだけで済む.
      */
     public static $errorVariablePattern = '/err|msg|mess/i';
@@ -148,31 +161,35 @@ class SC_Helper_SmartyEscape
     /** C8 の対象にする script 要素の type 属性 (小文字. 空文字は type 属性なし) */
     public static $arrScriptTypes = ['', 'text/javascript', 'application/javascript', 'module'];
 
-    /** C6 / C8 で modifier なしと同じに扱う modifier 列 */
-    public static $arrScriptAllowedModifiers = [[], ['default']];
-
-    /** @var string */
-    protected $left;
-
-    /** @var int script 要素の判定状態 (SCRIPT_*) */
-    protected $scriptState = self::SCRIPT_NONE;
-
-    /** @var string 閉じていない開始タグの文字列 */
-    protected $scriptOpenTag = '';
+    /** modifier なしと同じに扱う modifier 列 (C6 / C8). `default` は値を変えず, 代替値を出すだけのため */
+    public static $arrPlainModifiers = [[], ['default']];
 
     private const SCRIPT_NONE = 0;
     private const SCRIPT_OPEN_TAG = 1;
     private const SCRIPT_IN = 2;
     private const SCRIPT_OTHER = 3;
 
-    /** @var string */
+    /** @var string 左の区切り記号 */
+    protected $left;
+
+    /** @var string 右の区切り記号 */
     protected $right;
+
+    /** @var int script 要素の判定状態 (SCRIPT_*). C8 で使う */
+    protected $scriptState = self::SCRIPT_NONE;
+
+    /** @var string 閉じていない script の開始タグの文字列. C8 で使う */
+    protected $scriptOpenTag = '';
 
     public function __construct($left = '<!--{', $right = '}-->')
     {
         $this->left = $left;
         $this->right = $right;
     }
+
+    // ------------------------------------------------------------------
+    // 入口: テンプレートのソースの走査
+    // ------------------------------------------------------------------
 
     /**
      * prefilter.
@@ -313,6 +330,10 @@ class SC_Helper_SmartyEscape
         return false;
     }
 
+    // ------------------------------------------------------------------
+    // タグ単位の変換
+    // ------------------------------------------------------------------
+
     /**
      * 1 つのタグの中身を変換する.
      *
@@ -323,99 +344,262 @@ class SC_Helper_SmartyEscape
      */
     public function transformTag($inner, $inScript = false)
     {
-        $p = $this->parse($inner);
-        if ($p === null) {
-            return $this->transformNofilterTag($inner);
+        $tag = $this->parse($inner);
+        if ($tag === null || preg_match('/\bassign\s*=/', $tag['attrs'])) {
+            // 出力タグでない, 最上位に演算子がある式, 変数への代入は変換しない
+            return $inner;
         }
-        $forced = $this->forceHtmlEscape($p);
-        if ($forced !== $p['expr']) {
-            // 以下の規則で nofilter を補う場合だけ使う. 規則に当たらなければ元のタグを返す
-            $p = $this->parse($forced.$p['attrs'].$p['tail']);
-            if ($p === null) {
-                return $inner;
-            }
+        $tag = $this->forceHtmlEscape($tag);
+        if (preg_match('/\bnofilter\b/', $tag['attrs'])) {
+            // nofilter が書かれた出力は規則を試さない (C9 だけを掛ける)
+            return $tag['expr'].$tag['attrs'].$tag['tail'];
         }
-        $names = array_map(function ($m) { return $m['name']; }, $p['modifiers']);
-        // |smarty:nodefaults は後方互換処理で除去済みの想定だが, 残っていても判定から外す
-        $names = array_values(array_filter($names, function ($n) { return $n !== 'smarty'; }));
-        $last = end($names);
-        $expr = $p['expr'];
-        $suffix = '';
-
-        $hPos = array_search('h', $names, true);
-        if ($hPos !== false) {
-            // C1
-            $after = array_slice($names, $hPos + 1);
-            if (!in_array($after, static::$arrAllowedAfterH, true)) {
-                return $inner;
-            }
-            $expr = $this->protectDefaultArguments($expr, $p['modifiers'], $hPos);
-            $suffix = ' nofilter';
-        } elseif ($names === ['wordwrap'] && ($wrap = $this->getWordwrapBrArguments($expr, $p['modifiers'][0])) !== null) {
-            // C10
-            $expr = substr($expr, 0, $p['modifiers'][0]['start']).'|wordwrap:'.implode(':', $wrap).'|h|nl2br';
-            $suffix = ' nofilter';
-        } elseif ($last === 'nl2br' || $last === 'nl2br_html') {
-            // C3
-            $suffix = '|script_escape nofilter';
-        } elseif ($last !== false && in_array($last, static::$arrFixedOutputModifiers, true)) {
-            // C5
-            $suffix = ' nofilter';
-        } elseif ($last === 'escape' && ($mode = $this->getEscapeMode($expr, end($p['modifiers']))) !== null && isset(static::$arrEscapeModeSuffix[$mode])) {
-            // C7
-            $suffix = static::$arrEscapeModeSuffix[$mode];
-        } elseif ($names === [] && preg_match('/^\$arrErr\b/', ltrim($expr))) {
-            // C4
-            $suffix = '|'.static::MODIFIER_ERROR.' nofilter';
-        } elseif (in_array($names, static::$arrScriptAllowedModifiers, true) && preg_match('/^\s*\$(\w+)\s*$/', $p['modifiers'] === [] ? $expr : substr($expr, 0, $p['modifiers'][0]['start']), $m) && in_array($m[1], static::$arrRawVariables, true)
-            && ($p['modifiers'] === [] || $this->hasLiteralArguments($expr, $p['modifiers'][0]))) {
-            // C6 (添字・プロパティ付きは対象外. 本体で配列として使う名前 (arrDeliv 等) の要素を素の出力にしない.
-            // default の代替値はエスケープされずに出力されるため, リテラルの場合だけ対象にする)
-            $suffix = '|script_escape nofilter';
-        } elseif ($inScript && in_array($names, static::$arrScriptAllowedModifiers, true)) {
-            // C8
-            $suffix = '|'.static::MODIFIER_SCRIPT.'|script_escape nofilter';
-        } elseif ($names === [] && preg_match('/^\$(\w+)/', ltrim($expr), $m) && preg_match(static::$errorVariablePattern, $m[1])) {
-            // C4 (エラーメッセージ系の変数名)
-            $suffix = '|'.static::MODIFIER_ERROR.' nofilter';
+        $tag['inScript'] = $inScript;
+        if (in_array('h', $tag['names'], true)) {
+            // `h` を含む出力は C1 だけで判定する
+            $result = $this->ruleC1EscapedByH($tag);
         } else {
+            $result = null;
+            foreach (static::$arrRules as $rule) {
+                $result = $this->$rule($tag);
+                if ($result !== null) {
+                    break;
+                }
+            }
+        }
+        if ($result === null) {
+            // どの規則にも当たらない出力は Smarty の自動エスケープに任せる
             return $inner;
         }
 
-        $exprBody = rtrim($expr);
-        $trail = substr($expr, strlen($exprBody));
-        if ($suffix[0] === '|') {
-            [$mod, $attr] = explode(' ', $suffix, 2);
-
-            return $exprBody.$mod.$trail.$p['attrs'].' '.$attr.$p['tail'];
-        }
-
-        return $exprBody.$trail.$p['attrs'].$suffix.$p['tail'];
+        return $this->build($tag, $result[0], $result[1]);
     }
 
     /**
-     * 出力タグを解析する. 出力タグでない, または変換対象外なら null.
+     * 規則の結果からタグの中身を組み立てる. 式の後ろに modifier を足し, 属性の後ろに nofilter を足す.
      *
-     * @return array{expr: string, attrs: string, tail: string, modifiers: array<int, array{name: string, start: int, end: int}>}|null
+     * @param array $tag parse() の結果
+     * @param string $expr 書き換えた式
+     * @param string $modifiers 補う modifier (`|script_escape` 等. 無ければ空文字)
+     *
+     * @return string
      */
-    public function parse($inner, $allowNofilter = false)
+    protected function build(array $tag, $expr, $modifiers)
     {
-        $lead = strlen($inner) - strlen(ltrim($inner));
-        $s = ltrim($inner);
-        if ($s === '') {
+        $body = rtrim($expr);
+        $space = substr($expr, strlen($body)); // 式と属性の間の空白はそのまま残す
+
+        return $body.$modifiers.$space.$tag['attrs'].' nofilter'.$tag['tail'];
+    }
+
+    // ------------------------------------------------------------------
+    // 規則. 引数は parse() の結果. 戻り値は [書き換えた式, 補う modifier], 対象外なら null
+    // ------------------------------------------------------------------
+
+    /**
+     * C1: `h` を含む既知の modifier 列 (`h`, `default|h`, `h|nl2br`, `h|default` 等) に nofilter を補う.
+     * 自動エスケープと重ねると二重エスケープになるため. `h` の後に許可リスト外の modifier が続く出力は対象外
+     * (変換せず自動エスケープのまま. 二重エスケープで表示が崩れることはあっても生出力にはならない).
+     * `h` の後の `default` の代替値は `h` を通らずに出力されるため, `(代替値|h)` に書き換えて保護する.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    protected function ruleC1EscapedByH(array $tag)
+    {
+        $hIndex = array_search('h', $tag['names'], true);
+        $after = array_slice($tag['names'], $hIndex + 1);
+        if (!in_array($after, static::$arrAllowedAfterH, true)) {
             return null;
         }
-        $first = $s[0];
+
+        return [$this->protectDefaultArguments($tag, $hIndex), ''];
+    }
+
+    /**
+     * C10: `wordwrap` の区切りに `<br>` のリテラルを指定した出力 (`|wordwrap:幅:'<br />'[:真偽]` だけのもの) は,
+     * 改行で折り返してから `h` でエスケープし, `nl2br` で改行を `<br />` にする (`|wordwrap:幅:"\n"[:真偽]|h|nl2br nofilter`).
+     * 区切りの `<br>` を保ったまま, 値はエスケープされる. 値に元からある改行も `<br />` になる.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    protected function ruleC10WordwrapBr(array $tag)
+    {
+        if ($tag['names'] !== ['wordwrap']) {
+            return null;
+        }
+        $args = $this->wordwrapBrArguments($this->segment($tag, 0));
+        if ($args === null) {
+            return null;
+        }
+        $expr = substr($tag['expr'], 0, $tag['modifiers'][0]['start']).'|wordwrap:'.implode(':', $args).'|h|nl2br';
+
+        return [$expr, ''];
+    }
+
+    /**
+     * C3: `h` を伴わない `nl2br` / `nl2br_html` で終わる出力は従来どおり (|script_escape) とする.
+     * 決済モジュールが決済情報 (arrOther) に入れるリンク等の HTML, 商品説明の HTML を保持するため.
+     * 決済情報の項目名 (`$item.name`) も決済モジュールが HTML を入れるため, 本体の完了画面のテンプレートで
+     * `|script_escape nofilter` を明示している.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    protected function ruleC3Nl2br(array $tag)
+    {
+        if (!in_array($tag['last'], ['nl2br', 'nl2br_html'], true)) {
+            return null;
+        }
+
+        return [$tag['expr'], '|script_escape'];
+    }
+
+    /**
+     * C5: 固定の属性文字列や HTML を返す modifier (sfGetChecked 等) で終わる出力に nofilter を補う.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    protected function ruleC5FixedOutput(array $tag)
+    {
+        if ($tag['last'] === null || !in_array($tag['last'], static::$arrFixedOutputModifiers, true)) {
+            return null;
+        }
+
+        return [$tag['expr'], ''];
+    }
+
+    /**
+     * C7: `escape:'hexentity'` 等, 自動エスケープと重ねると壊れる `escape` のモードで終わる出力を従来どおりとする.
+     * モードごとの扱いは $arrRawEscapeModes を参照.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    protected function ruleC7EscapeMode(array $tag)
+    {
+        if ($tag['last'] !== 'escape') {
+            return null;
+        }
+        $mode = $this->escapeMode($this->segment($tag, count($tag['modifiers']) - 1));
+        if ($mode === null || !isset(static::$arrRawEscapeModes[$mode])) {
+            return null;
+        }
+
+        return [$tag['expr'], static::$arrRawEscapeModes[$mode]];
+    }
+
+    /**
+     * C4: modifier なしの `$arrErr…` は, エスケープした後に `<br>` だけを戻す modifier (h_allow_br) を通す.
+     * エラーメッセージは `<br>` で改行する慣習のため.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    protected function ruleC4ArrErr(array $tag)
+    {
+        if ($tag['names'] !== [] || $tag['variable'] !== 'arrErr') {
+            return null;
+        }
+
+        return [$tag['expr'], '|'.static::MODIFIER_ERROR];
+    }
+
+    /**
+     * C6: HTML/JS 断片や JSON を入れる慣習の変数 ($arrRawVariables) を, 添字・プロパティなしで
+     * modifier なし (または `default` だけ) で出力する場合は従来どおり (|script_escape) とする.
+     * 添字・プロパティ付きは対象外 (本体で配列として使う名前 (arrDeliv 等) の要素を素の出力にしない).
+     * `default` の代替値はエスケープされずに出力されるため, リテラルの場合だけ対象にする.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    protected function ruleC6RawVariable(array $tag)
+    {
+        if (!$tag['isBareVariable'] || !in_array($tag['variable'], static::$arrRawVariables, true)) {
+            return null;
+        }
+        if (!in_array($tag['names'], static::$arrPlainModifiers, true)) {
+            return null;
+        }
+        if ($tag['names'] !== [] && !$this->hasLiteralArguments($this->segment($tag, 0))) {
+            return null;
+        }
+
+        return [$tag['expr'], '|script_escape'];
+    }
+
+    /**
+     * C8: JavaScript の script 要素の中にある, modifier なし (または `default` だけ) の出力は,
+     * HTML ではなく JavaScript の文字列用にエスケープする (|escape_js|script_escape).
+     * HTML 用のエスケープでは JS の文字列が `&amp;` 等に化けるため.
+     * script 要素の開始・終了は同じテンプレートのソースの中で判定する (scanScript). 判定できない場合は通常の自動エスケープになる.
+     * escape_js は `<` `>` `&` 引用符等も `\x3c` 形式にするため, 判定を誤って HTML の中に出力しても HTML として解釈されない.
+     * JavaScript で値を HTML として DOM に入れる箇所 (`.html()` / `innerHTML` 等) は HTML としてのエスケープにならないため,
+     * テンプレートで `|h` を付ける (C1 により `|h nofilter` になる).
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    protected function ruleC8InScript(array $tag)
+    {
+        if (!$tag['inScript'] || !in_array($tag['names'], static::$arrPlainModifiers, true)) {
+            return null;
+        }
+
+        return [$tag['expr'], '|'.static::MODIFIER_SCRIPT.'|script_escape'];
+    }
+
+    /**
+     * C4: modifier なしの, エラーメッセージ系の名前 ($errorVariablePattern) の変数も `$arrErr…` と同じ扱いにする.
+     * C6 の変数は C6 を, script 要素の中は C8 を優先するため, この規則は最後に試す.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    protected function ruleC4ErrorName(array $tag)
+    {
+        if ($tag['names'] !== [] || $tag['variable'] === null || !preg_match(static::$errorVariablePattern, $tag['variable'])) {
+            return null;
+        }
+
+        return [$tag['expr'], '|'.static::MODIFIER_ERROR];
+    }
+
+    // ------------------------------------------------------------------
+    // 式の解析
+    // ------------------------------------------------------------------
+
+    /**
+     * 出力タグを分解する.
+     *
+     * 出力タグでない (関数タグ・条件式など) 場合と, 最上位に演算子や空白区切りの式があって modifier が
+     * 式全体に掛からない場合は null を返す (変換しない).
+     *
+     * 返す配列:
+     *   expr           式 (先頭の空白と modifier を含む)
+     *   modifiers      最上位の modifier の名前 (name) と $inner 内の位置 (start / end). `|smarty:nodefaults` は除く
+     *   names          modifiers の名前の一覧
+     *   last           最後の modifier の名前. 無ければ null
+     *   variable       式の先頭の変数名 (`$arrErr.x` なら arrErr). 変数で始まらなければ null
+     *   isBareVariable 式が添字・プロパティ・modifier の無い変数 1 つだけか
+     *   attrs          式の後ろの属性 (nocache / nofilter / assign=…). 末尾の空白は含まない
+     *   tail           タグ末尾の空白
+     *
+     * @param string $inner 区切り記号を除いたタグの中身
+     *
+     * @return array|null
+     */
+    public function parse($inner)
+    {
+        $len = strlen($inner);
+        $lead = $len - strlen(ltrim($inner));
+        if ($lead === $len) {
+            return null;
+        }
+        $first = $inner[$lead];
         if (!($first === '$' || $first === '"' || $first === "'" || $first === '(' || ctype_digit($first))) {
             return null;
         }
-        $len = strlen($s);
-        $depth = 0;
-        $quote = null;
+        $depth = 0; // 括弧 () [] の深さ. 最上位 (0) だけを見る
+        $quote = null; // 引用符の中は読み飛ばす
         $modifiers = [];
         $exprEnd = $len;
-        for ($i = 0; $i < $len; $i++) {
-            $c = $s[$i];
+        for ($i = $lead; $i < $len; $i++) {
+            $c = $inner[$i];
             if ($quote !== null) {
                 if ($c === '\\') {
                     $i++;
@@ -426,139 +610,115 @@ class SC_Helper_SmartyEscape
             }
             if ($c === '"' || $c === "'") {
                 $quote = $c;
-            } elseif ($c === '(' || $c === '[') {
+                continue;
+            }
+            if ($c === '(' || $c === '[') {
                 $depth++;
-            } elseif ($c === ')' || $c === ']') {
+                continue;
+            }
+            if ($c === ')' || $c === ']') {
                 $depth = max(0, $depth - 1);
-            } elseif ($depth === 0) {
-                // modifier は直前の値にだけ掛かる. 最上位に演算子 (代入・比較・三項・算術・論理) や
-                // 空白で区切られた式があると, modifier が式全体を覆わないため変換しない.
-                if ($c === '-' && ($s[$i + 1] ?? '') === '>') {
-                    // オブジェクトのプロパティ参照 (->)
-                    $i++;
-                    continue;
-                }
-                if (str_contains('=?+*/%<>!&^~-', $c) || ($c === ':' && $modifiers === [])) {
+                continue;
+            }
+            if ($depth > 0) {
+                continue;
+            }
+            if ($c === '-' && ($inner[$i + 1] ?? '') === '>') {
+                // オブジェクトのプロパティ参照 (->)
+                $i++;
+                continue;
+            }
+            if (str_contains('=?+*/%<>!&^~-', $c) || ($c === ':' && $modifiers === [])) {
+                // 最上位に演算子 (代入・比較・三項・算術・論理) がある. modifier が式全体を覆わないため変換しない
+                return null;
+            }
+            if ($c === '|') {
+                if (($inner[$i + 1] ?? '') === '|') {
+                    // 論理和
                     return null;
                 }
-                if ($c === '|') {
-                    if (($s[$i + 1] ?? '') === '|') {
-                        return null;
-                    }
-                    if (preg_match('/\G\s*(@?[A-Za-z_]\w*)/', $s, $m, 0, $i + 1)) {
-                        $modifiers[] = ['name' => ltrim($m[1], '@'), 'start' => $i, 'end' => null];
-                    }
-                } elseif (ctype_space($c)) {
-                    if (preg_match('/\G\s+(nofilter|nocache|assign\s*=)/', $s, $m, 0, $i) || trim(substr($s, $i)) === '') {
-                        $exprEnd = $i;
-                        break;
-                    }
+                if (preg_match('/\G\s*(@?[A-Za-z_]\w*)/', $inner, $m, 0, $i + 1)) {
+                    $modifiers[] = ['name' => ltrim($m[1], '@'), 'start' => $i, 'end' => null];
+                }
+                continue;
+            }
+            if (ctype_space($c)) {
+                // 空白の後ろに置けるのは属性 (nofilter / nocache / assign=) だけ. それ以外は空白区切りの式なので変換しない
+                if (preg_match('/\G\s+(nofilter|nocache|assign\s*=)/', $inner, $m, 0, $i) || trim(substr($inner, $i)) === '') {
+                    $exprEnd = $i;
+                    break;
+                }
 
-                    return null;
-                }
+                return null;
             }
         }
         if ($quote !== null) {
+            // 引用符が閉じていない
             return null;
         }
-        $attrs = substr($s, $exprEnd);
-        if (preg_match($allowNofilter ? '/\bassign\s*=/' : '/\b(nofilter|assign\s*=)/', $attrs)) {
-            return null;
-        }
-        // modifier の終端
+        // modifier の終端は次の modifier の開始 (最後は式の終わり)
         for ($k = 0, $n = count($modifiers); $k < $n; $k++) {
             $modifiers[$k]['end'] = $k + 1 < $n ? $modifiers[$k + 1]['start'] : $exprEnd;
         }
+        // |smarty:nodefaults は後方互換処理 (lower_compatibility_smarty) で除去済みの想定だが, 残っていても判定から外す
+        $modifiers = array_values(array_filter($modifiers, function ($m) { return $m['name'] !== 'smarty'; }));
+        $names = array_column($modifiers, 'name');
+        $expr = substr($inner, 0, $exprEnd);
+        $base = $modifiers === [] ? $expr : substr($expr, 0, $modifiers[0]['start']);
+        $attrs = substr($inner, $exprEnd);
         $attrsBody = rtrim($attrs);
-        $tail = substr($attrs, strlen($attrsBody));
 
         return [
-            'expr' => substr($inner, 0, $lead).substr($s, 0, $exprEnd),
+            'expr' => $expr,
+            'modifiers' => $modifiers,
+            'names' => $names,
+            'last' => $names === [] ? null : $names[count($names) - 1],
+            'variable' => preg_match('/^\s*\$(\w+)/', $expr, $m) ? $m[1] : null,
+            'isBareVariable' => (bool) preg_match('/^\s*\$\w+\s*$/', $base),
             'attrs' => $attrsBody,
-            'tail' => $tail,
-            'modifiers' => array_map(function ($m) use ($lead) {
-                return ['name' => $m['name'], 'start' => $m['start'] + $lead, 'end' => $m['end'] + $lead];
-            }, $modifiers),
+            'tail' => substr($attrs, strlen($attrsBody)),
         ];
     }
 
     /**
-     * テンプレートに nofilter が書かれた出力タグの html モードの `escape` を `escape:'force'` にする (C9).
+     * modifier の文字列 (`|name:arg1:arg2`) を式から取り出す.
      *
-     * @param string $inner
-     *
-     * @return string
-     */
-    protected function transformNofilterTag($inner)
-    {
-        $p = $this->parse($inner, true);
-        if ($p === null || !preg_match('/\bnofilter\b/', $p['attrs'])) {
-            return $inner;
-        }
-
-        return $this->forceHtmlEscape($p).$p['attrs'].$p['tail'];
-    }
-
-    /**
-     * 最上位の modifier 列にある html モードの `escape` (引数なし / 'html') を `escape:'force'` にした式を返す (C9).
-     * Smarty は自動エスケープを有効にすると html モードの `escape` を何もしない式にコンパイルするため,
-     * nofilter と組み合わせると値がエスケープされずに出力される.
-     *
-     * @param array{expr: string, modifiers: array<int, array{name: string, start: int, end: int}>} $p parse() の結果
+     * @param array $tag parse() の結果
+     * @param int $index modifiers の添字
      *
      * @return string
      */
-    protected function forceHtmlEscape(array $p)
+    protected function segment(array $tag, $index)
     {
-        $expr = $p['expr'];
-        // 後ろから置換して位置をずらさない
-        for ($i = count($p['modifiers']) - 1; $i >= 0; $i--) {
-            $m = $p['modifiers'][$i];
-            if ($m['name'] !== 'escape' || $this->getEscapeMode($expr, $m) !== 'html') {
-                continue;
-            }
-            $segment = substr($expr, $m['start'], $m['end'] - $m['start']);
-            $body = rtrim($segment);
-            $args = $this->splitArguments($body);
-            $args[1] = "'force'";
-            $expr = substr($expr, 0, $m['start']).implode(':', $args).substr($segment, strlen($body)).substr($expr, $m['end']);
-        }
+        $m = $tag['modifiers'][$index];
 
-        return $expr;
+        return substr($tag['expr'], $m['start'], $m['end'] - $m['start']);
     }
 
     /**
-     * `h` より後ろの `default` の各引数を `(引数|h)` に置き換える.
+     * C1: `h` より後ろの `default` の各引数を `(引数|h)` に置き換えた式を返す.
+     *
+     * @param array $tag parse() の結果
+     * @param int $hIndex `h` の modifiers での添字
+     *
+     * @return string
      */
-    protected function protectDefaultArguments($expr, array $modifiers, $hPos)
+    protected function protectDefaultArguments(array $tag, $hIndex)
     {
-        // 後ろから置換して位置をずらさない
-        $hIndex = null;
-        $count = 0;
-        foreach ($modifiers as $i => $m) {
-            if ($m['name'] === 'smarty') {
-                continue;
-            }
-            if ($count === $hPos) {
-                $hIndex = $i;
-                break;
-            }
-            $count++;
-        }
-        for ($i = count($modifiers) - 1; $i > $hIndex; $i--) {
-            $m = $modifiers[$i];
+        $expr = $tag['expr'];
+        // 後ろから置換して, 前にある modifier の位置をずらさない
+        for ($i = count($tag['modifiers']) - 1; $i > $hIndex; $i--) {
+            $m = $tag['modifiers'][$i];
             if ($m['name'] !== 'default') {
                 continue;
             }
-            $segment = substr($expr, $m['start'], $m['end'] - $m['start']);
-            $args = $this->splitArguments($segment);
+            $args = $this->splitArguments($this->segment($tag, $i));
             if (count($args) <= 1) {
                 continue;
             }
             $rebuilt = array_shift($args);
-            foreach ($args as $a) {
-                $t = trim($a);
-                $rebuilt .= ':('.$t.'|h)';
+            foreach ($args as $arg) {
+                $rebuilt .= ':('.trim($arg).'|h)';
             }
             $expr = substr($expr, 0, $m['start']).$rebuilt.substr($expr, $m['end']);
         }
@@ -567,16 +727,16 @@ class SC_Helper_SmartyEscape
     }
 
     /**
-     * `|wordwrap:幅:'<br />'[:真偽]` の形なら, 区切りを改行に替えた引数を返す (C10). 対象外なら null.
+     * C10: `|wordwrap:幅:'<br />'[:真偽]` の形なら, 区切りを改行に替えた引数 [幅, "\n", 真偽] を返す. 対象外なら null.
      * 幅は数値, 区切りは `<br>` / `<br />` のリテラル, 第 3 引数は真偽値・数値のリテラルに限る.
      *
-     * @param array{name: string, start: int, end: int} $modifier
+     * @param string $segment modifier の文字列
      *
      * @return array<int, string>|null
      */
-    protected function getWordwrapBrArguments($expr, array $modifier)
+    protected function wordwrapBrArguments($segment)
     {
-        $args = array_map('trim', $this->splitArguments(substr($expr, $modifier['start'], $modifier['end'] - $modifier['start'])));
+        $args = array_map('trim', $this->splitArguments($segment));
         if (count($args) < 3 || count($args) > 4) {
             return null;
         }
@@ -593,16 +753,16 @@ class SC_Helper_SmartyEscape
 
     /**
      * modifier の引数がすべてリテラルか (C6).
+     * 数値, シングルクォートの文字列, 変数の埋め込み (`$` / `` ` ``) を含まないダブルクォートの文字列をリテラルとする.
      *
-     * @param array{name: string, start: int, end: int} $modifier
+     * @param string $segment modifier の文字列
      *
      * @return bool
      */
-    protected function hasLiteralArguments($expr, array $modifier)
+    protected function hasLiteralArguments($segment)
     {
-        $args = $this->splitArguments(substr($expr, $modifier['start'], $modifier['end'] - $modifier['start']));
+        $args = $this->splitArguments($segment);
         foreach (array_slice($args, 1) as $arg) {
-            // 数値, シングルクォートの文字列, 変数の埋め込み ($ / `) を含まないダブルクォートの文字列
             if (!preg_match('/^\s*(?:-?\d+(?:\.\d+)?|\'(?:[^\'\\\\]|\\\\.)*\'|"[^"$`\\\\]*")\s*$/', $arg)) {
                 return false;
             }
@@ -612,13 +772,15 @@ class SC_Helper_SmartyEscape
     }
 
     /**
-     * `escape` modifier の第 1 引数 (モード) を返す. 引数なしは html. リテラル以外は null.
+     * `escape` modifier の第 1 引数 (モード) を小文字で返す. 引数なしは html. リテラル以外は null.
      *
-     * @param array{name: string, start: int, end: int} $modifier
+     * @param string $segment modifier の文字列
+     *
+     * @return string|null
      */
-    protected function getEscapeMode($expr, array $modifier)
+    protected function escapeMode($segment)
     {
-        $args = $this->splitArguments(substr($expr, $modifier['start'], $modifier['end'] - $modifier['start']));
+        $args = $this->splitArguments($segment);
         if (count($args) < 2) {
             return 'html';
         }
@@ -632,6 +794,10 @@ class SC_Helper_SmartyEscape
 
     /**
      * `|name:arg1:arg2` を ['|name', 'arg1', 'arg2'] に分ける (引用符・括弧の中の `:` は区切らない).
+     *
+     * @param string $segment modifier の文字列
+     *
+     * @return array<int, string>
      */
     protected function splitArguments($segment)
     {
@@ -668,6 +834,45 @@ class SC_Helper_SmartyEscape
 
         return $parts;
     }
+
+    // ------------------------------------------------------------------
+    // C9: html モードの escape の書き換え
+    // ------------------------------------------------------------------
+
+    /**
+     * C9: 最上位の modifier 列にある html モードの `escape` (引数なし / 'html') を `escape:'force'` にする.
+     * Smarty は自動エスケープを有効にすると html モードの `escape` を何もしない式にコンパイルするため,
+     * nofilter と組み合わせると値がエスケープされずに出力される. 書き換えた場合は分解し直した結果を返す.
+     *
+     * @param array $tag parse() の結果
+     *
+     * @return array parse() の結果
+     */
+    protected function forceHtmlEscape(array $tag)
+    {
+        $expr = $tag['expr'];
+        // 後ろから置換して, 前にある modifier の位置をずらさない
+        for ($i = count($tag['modifiers']) - 1; $i >= 0; $i--) {
+            $m = $tag['modifiers'][$i];
+            $segment = $this->segment($tag, $i);
+            if ($m['name'] !== 'escape' || $this->escapeMode($segment) !== 'html') {
+                continue;
+            }
+            $body = rtrim($segment);
+            $args = $this->splitArguments($body);
+            $args[1] = "'force'";
+            $expr = substr($expr, 0, $m['start']).implode(':', $args).substr($segment, strlen($body)).substr($expr, $m['end']);
+        }
+        if ($expr === $tag['expr']) {
+            return $tag;
+        }
+
+        return $this->parse($expr.$tag['attrs'].$tag['tail']) ?: $tag;
+    }
+
+    // ------------------------------------------------------------------
+    // modifier の実装
+    // ------------------------------------------------------------------
 
     /**
      * C4: HTML エスケープした後に `<br>` / `<br />` だけを戻す.

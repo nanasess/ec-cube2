@@ -79,7 +79,7 @@ class Common_TestCase extends \PHPUnit\Framework\TestCase
      *
      * このクラスは E_DEPRECATED を除外しているため, 実行中だけ有効にする.
      *
-     * @ 演算子で抑制されたものは含めない.
+     * @ 演算子で抑制されたものと, data/vendor 配下のライブラリで発生したものは含めない.
      *
      * @return string[]
      */
@@ -90,6 +90,9 @@ class Common_TestCase extends \PHPUnit\Framework\TestCase
         set_error_handler(function ($errno, $errstr, $errfile, $errline) use (&$deprecations) {
             if (!(error_reporting() & $errno)) {
                 return false;
+            }
+            if (str_contains($errfile, DIRECTORY_SEPARATOR.'data'.DIRECTORY_SEPARATOR.'vendor'.DIRECTORY_SEPARATOR)) {
+                return true;
             }
             $deprecations[] = $errstr.' ('.$errfile.':'.$errline.')';
 

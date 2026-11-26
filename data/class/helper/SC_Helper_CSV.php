@@ -399,7 +399,7 @@ class php_user_filter_lf2crlf extends php_user_filter
     public function filter($in, $out, &$consumed, $closing)
     {
         while ($bucket = stream_bucket_make_writeable($in)) {
-            $bucket->data = preg_replace("/[\r\n]+$/", "\r\n", $bucket->data);
+            $bucket->data = preg_replace("/[\r\n]+$/", "\r\n", (string) $bucket->data);
             $consumed += $bucket->datalen;
             stream_bucket_append($out, $bucket);
         }
